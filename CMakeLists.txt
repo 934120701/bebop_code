@@ -168,8 +168,9 @@ include_directories(
 ## Mark executable scripts (Python etc.) for installation
 ## in contrast to setup.py, you can choose the destination
  install(PROGRAMS
-   #scripts/node.py
+   scripts/node.py
    scripts/node2.py
+   scripts/bustercode.py
    DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
  )
 
