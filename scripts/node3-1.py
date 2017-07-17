@@ -49,10 +49,16 @@ class image_converter:
   
     # Does some bounds checking as +/- 70 is maximum angle
     if ((position_error_y > 0) and (current_angle_y <= 65) and (current_angle_y >= -65)):
-      new_angle_y = current_angle_y + 5
+      if current_angle_y == 65:
+        new_angle_y= current_angle_y
+      else:
+        new_angle_y = current_angle_y + 1
   
-    elif ((position_error_y < 0) and (current_angle_y <= 65) and (current_angle_y >= -65)):
-      new_angle_y = current_angle_y - 5
+    elif ((position_error_y < 0) and (current_angle_y - 1 <= 65) and (current_angle_y - 1 >= -65)):
+      if current_angle_y==-65:
+        new_angle_y=current_angle_y
+      else:
+        new_angle_y = current_angle_y - 1
 
     else:
       new_angle_y = current_angle_y
@@ -64,16 +70,16 @@ class image_converter:
   def publish_the_message(self, camera_angle):
     # pub = rospy.Publisher("/bebop/camera_control", Twist, queue_size=10)
     #rospy.init_node('node2', anonymous=True)
-    rate = rospy.Rate(10)
+    #rate = rospy.Rate(10)
 
 
-    while not rospy.is_shutdown():
+    #while not rospy.is_shutdown():
       # string_to_publish = '{angular: {y : %d }}' % camera_angle
       self.pan_camera_cmd.angular.y = camera_angle
       self.cmd_vel.publish(self.pan_camera_cmd)
       
       print(camera_angle)
-      rate.sleep()
+      #rate.sleep()
  
 
 
@@ -103,25 +109,29 @@ class image_converter:
 
     gray = aruco.drawDetectedMarkers(gray, corners)
 
+    if (len(corners) != 0):
+      aruco_code_center_pixel = self.tag_center(corners)
+      camera_angle = self.camera_angle_correction(aruco_code_center_pixel, camera_angle)
+      self.publish_the_message(camera_angle)
+
+
     cv2.imshow("Image window", cv_image)
     cv2.waitKey(3)
 
+
     try:
       self.image_pub.publish(self.bridge.cv2_to_imgmsg(cv_image, "bgr8"))
-      if (len(corners) != 0):
-          aruco_code_center_pixel = self.tag_center(corners)
-          camera_angle = self.camera_angle_correction(aruco_code_center_pixel, camera_angle)
-          self.publish_the_message(camera_angle)
+
     except CvBridgeError as e:
       print(e)
 
 
 camera_angle = 0
-def main(args):
- 
 
-  ic = image_converter()
+def main(args):
   rospy.init_node('image_converter', anonymous=True)
+  ic = image_converter()
+
   try:
     rospy.spin()
   except KeyboardInterrupt:
