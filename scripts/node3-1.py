@@ -1,4 +1,9 @@
 #!/usr/bin/env python
+
+'''
+This program causes the camera on the Bebop to pan in the Y direction so that the tag is in the middle
+of the screen.
+'''
 from __future__ import print_function
 import roslib
 roslib.load_manifest('opencv_package')
@@ -10,22 +15,19 @@ from sensor_msgs.msg import Image
 from cv_bridge import CvBridge, CvBridgeError
 import cv2.aruco as aruco
 from geometry_msgs.msg import Twist
-
-
-# Currently need to find a place to store the camera_angle variable so that we can keep track of the current angle and the 
-# camera_angle_correction function can be passed it.
-
-# Also, need to understand the exact way to format the message we need to publish on the topic because it is currently throwing errors
-
+import glob
+import numpy as np
 
 
 class image_converter:
 
   def __init__(self):
+    # Image after use in cv2 can be published
     self.image_pub = rospy.Publisher("image_topic_2",Image, queue_size=10)
     # Added the line below so we can publish messages to the camera_control topic with message type Twist
     self.message_pub = rospy.Publisher("/bebop/camera_control", Twist, queue_size=10)
     self.bridge = CvBridge()
+    # Subscribe to the image_raw topic, and use the callback function
     self.image_sub = rospy.Subscriber("/bebop/image_raw",Image,self.callback)
     self.cmd_vel = rospy.Publisher('/bebop/camera_control', Twist, queue_size=10)
     self.pan_camera_cmd = Twist()
@@ -60,6 +62,7 @@ class image_converter:
       else:
         new_angle_y = current_angle_y - 1
 
+    # If the new_angle_y is going to go out of bounds, set it equal to the current angle
     else:
       new_angle_y = current_angle_y
 
@@ -68,19 +71,18 @@ class image_converter:
 
   # publish_the_message takes the camera_angle we want to publish and publishes it to the camera_control topic
   def publish_the_message(self, camera_angle):
-    # pub = rospy.Publisher("/bebop/camera_control", Twist, queue_size=10)
-    #rospy.init_node('node2', anonymous=True)
-    #rate = rospy.Rate(10)
-
-
-    #while not rospy.is_shutdown():
-      # string_to_publish = '{angular: {y : %d }}' % camera_angle
+      # Only changes the y plane values, we could additionally add in x also
       self.pan_camera_cmd.angular.y = camera_angle
       self.cmd_vel.publish(self.pan_camera_cmd)
-      
       print(camera_angle)
-      #rate.sleep()
- 
+
+  # draw the coordinate lines on the image
+  def draw(img, corners, imgpts):
+      corner = tuple(corners[0].ravel())
+      img = cv2.line(img, corner, tuple(imgpts[0].ravel()), (255, 0, 0), 5)
+      img = cv2.line(img, corner, tuple(imgpts[1].ravel()), (0, 255, 0), 5)
+      img = cv2.line(img, corner, tuple(imgpts[2].ravel()), (0, 0, 255), 5)
+      return img
 
 
   def callback(self,data):
@@ -89,49 +91,62 @@ class image_converter:
     except CvBridgeError as e:
       print(e)
     global camera_angle
+    markerLength = 5
 
-   #(rows,cols,channels) = cv_image.shape
+   #'''(rows,cols,channels) = cv_image.shape
     #if cols > 60 and rows > 60 :
-    #  cv2.circle(cv_image, (50,50), 10, 255)
+    #  cv2.circle(cv_image, (50,50), 10, 255)'''
 
+    # Load the camera coefficients etc
+    with np.load('B.npz') as X:
+      mtx, dist, _, _ = [X[i] for i in ('mtx', 'dist', 'rvecs', 'tvecs')]
+
+
+    # Make the image gray for ArUco tag detection
     gray = cv2.cvtColor(cv_image, cv2.COLOR_BGR2GRAY)
+    # Assign the dictionary we wish to use (6 bit, with 250 separate tags)
     aruco_dict = aruco.Dictionary_get(aruco.DICT_6X6_250)
     parameters = aruco.DetectorParameters_create()
 
-     #lists of ids and the corners beloning to each id
+    # lists of ids and the corners belonging to each id
     corners, ids, rejectedImgPoints = aruco.detectMarkers(gray, aruco_dict, parameters=parameters)
-  
-    '''if (len(corners) != 0):
-  
-      aruco_code_center_pixel = self.tag_center(corners)    
-      camera_angle = self.camera_angle_correction(aruco_code_center_pixel, camera_angle)
-      self.publish_the_message(camera_angle)'''
+    #aruco.drawDetectedMarkers(cv_image, corners, ids)
 
-    gray = aruco.drawDetectedMarkers(gray, corners)
 
+    # this if statement lets us check if we have detected a tag by checking the size
+    # of the corners list to see if it's greater than 0. If it is, then we want to
+    # find the center position of the tag and then correct the camera angle to center
+    # it by publishing back a new angle to the control_camera topic.
     if (len(corners) != 0):
+      # Draw on the markers so we can see they've been detected
+      gray = aruco.drawDetectedMarkers(cv_image, corners, ids)
+      rvec, tvec = aruco.estimatePoseSingleMarkers(corners, markerLength, mtx, dist)  # For a single marker
+      gray = aruco.drawAxis(gray, mtx, dist, rvec, tvec, 10)
       aruco_code_center_pixel = self.tag_center(corners)
       camera_angle = self.camera_angle_correction(aruco_code_center_pixel, camera_angle)
       self.publish_the_message(camera_angle)
 
-
+    # Display the video feed frames every 3 ms.
     cv2.imshow("Image window", cv_image)
-    cv2.waitKey(3)
+    cv2.waitKey(5)
 
-
+    # Publish the image back into ROS image message type (not sure why, I guess it's if you
+    # want to do something else with it after using OpenCV).
     try:
       self.image_pub.publish(self.bridge.cv2_to_imgmsg(cv_image, "bgr8"))
 
     except CvBridgeError as e:
       print(e)
 
-
+# Setup an initial camera angle
 camera_angle = 0
 
 def main(args):
+  # Initialise the node under the name image_converter
   rospy.init_node('image_converter', anonymous=True)
+  # Assign the ic variable to the class type of image_converter
   ic = image_converter()
-
+  # Keep running through until we stop it.
   try:
     rospy.spin()
   except KeyboardInterrupt:
