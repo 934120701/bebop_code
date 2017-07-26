@@ -171,7 +171,6 @@ include_directories(
    scripts/node.py
    scripts/node2.py
    scripts/bustercode.py
-   scripts/transform_example.py
    DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
  )
 

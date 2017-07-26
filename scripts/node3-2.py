@@ -10,13 +10,18 @@ roslib.load_manifest('opencv_package')
 import sys
 import rospy
 import cv2
+import cv2.aruco as aruco
+import glob
+import numpy as np
+
+
 from std_msgs.msg import String
 from sensor_msgs.msg import Image
 from cv_bridge import CvBridge, CvBridgeError
-import cv2.aruco as aruco
 from geometry_msgs.msg import Twist
-import glob
-import numpy as np
+from std_msgs.msg import Empty
+from time import sleep, time
+from bebop_msgs.msg import Ardrone3PilotingStateAltitudeChanged
 
 
 class image_converter:
@@ -31,6 +36,8 @@ class image_converter:
     self.image_sub = rospy.Subscriber("/bebop/image_raw",Image,self.callback)
     self.cmd_vel = rospy.Publisher('/bebop/camera_control', Twist, queue_size=10)
     self.pan_camera_cmd = Twist()
+    self.flight_cmd = Twist()
+    self.flight_pub = rospy.Publisher('/bebop/cmd_vel', Twist, queue_size=10)
 
   # tag_center takes the values for the pixels of the corners of an identified ArUco tag and calculates the 
   # position of the center pixel based on these, returning the two element list with x and y positions
@@ -74,7 +81,7 @@ class image_converter:
       # Only changes the y plane values, we could additionally add in x also
       self.pan_camera_cmd.angular.y = camera_angle
       self.cmd_vel.publish(self.pan_camera_cmd)
-      print(camera_angle)
+      #print(camera_angle)
 
   # draw the coordinate lines on the image
   def draw(img, corners, imgpts):
@@ -83,6 +90,34 @@ class image_converter:
       img = cv2.line(img, corner, tuple(imgpts[1].ravel()), (0, 255, 0), 5)
       img = cv2.line(img, corner, tuple(imgpts[2].ravel()), (0, 0, 255), 5)
       return img
+
+  def flight_commands(self, aruco_code_center_pixel):
+    if aruco_code_center_pixel[0] < 350:
+      #turn anticlockwise
+      self.flight_cmd.angular.z = 0.15
+      self.flight_cmd.linear.x = 0
+      print("anticlockwise")
+    elif aruco_code_center_pixel[0] > 506:
+      #turn clockwise
+      self.flight_cmd.angular.z = -0.15
+      self.flight_cmd.linear.x = 0
+      print("clockwise")
+    elif aruco_code_center_pixel[0] < 506 and aruco_code_center_pixel[0] > 350 and aruco_code_center_pixel[1] < 360:
+      #fly forwards
+      self.flight_cmd.angular.z = 0
+      self.flight_cmd.linear.x = 0.08
+      print("forwards")
+    else:
+      #hover
+      self.flight_cmd.angular.z = 0
+      self.flight_cmd.linear.x = 0
+      self.flight_cmd.linear.y = 0
+      self.flight_cmd.linear.z = 0
+
+      print("hover")
+
+    self.flight_pub.publish(self.flight_cmd)
+
 
 
   def callback(self,data):
@@ -94,11 +129,12 @@ class image_converter:
 
     markerLength = 5
 
-   #'''(rows,cols,channels) = cv_image.shape
-    #if cols > 60 and rows > 60 :
-    #  cv2.circle(cv_image, (50,50), 10, 255)'''
-
     # Load the camera coefficients etc
+
+    cv2.line(cv_image, (0, 360), (856, 360), 255, 2)
+    cv2.line(cv_image, (350, 0), (350, 480), 255, 2)
+    cv2.line(cv_image, (506, 0), (506, 480), 255, 2)
+
     with np.load('B.npz') as X:
       mtx, dist, _, _ = [X[i] for i in ('mtx', 'dist', 'rvecs', 'tvecs')]
 
@@ -123,16 +159,21 @@ class image_converter:
       gray = aruco.drawDetectedMarkers(cv_image, corners, ids)
       rvec, tvec = aruco.estimatePoseSingleMarkers(corners, markerLength, mtx, dist)  # For a single marker
       r33 = cv2.Rodrigues(rvec,jacobian=0)
-      print(r33[0])
+      #print(r33[0])
       gray = aruco.drawAxis(gray, mtx, dist, rvec, tvec, 10)
-      cv_image = cv2.warpPerspective(gray, r33[0], (856, 480))
+      #cv_image = cv2.warpPerspective(gray, r33[0], (856, 480))
       aruco_code_center_pixel = self.tag_center(corners)
-      camera_angle = self.camera_angle_correction(aruco_code_center_pixel, camera_angle)
-      self.publish_the_message(camera_angle)
+      #camera_angle = self.camera_angle_correction(aruco_code_center_pixel, camera_angle)
+      #camera_angle_birds_eye = -70
+      #self.publish_the_message(camera_angle_birds_eye)
+      #self.flight_commands(aruco_code_center_pixel)
 
     # Display the video feed frames every 3 ms.
     cv2.imshow("Image window", cv_image)
-    cv2.waitKey(50) #5
+    cv2.waitKey(5) #5
+    global counter
+    counter = counter + 1
+    print(counter)
 
     # Publish the image back into ROS image message type (not sure why, I guess it's if you
     # want to do something else with it after using OpenCV).
@@ -142,15 +183,97 @@ class image_converter:
     except CvBridgeError as e:
       print(e)
 
+
+# leave_gantry flys the drone forward ~ 2m at the current height
+def leave_gantry():
+  leave_pub = rospy.Publisher('/bebop/cmd_vel', Twist, queue_size=10)
+  leave_cmd = Twist()
+  timeout = 3
+  current_time = time()
+  print("current_time", current_time)
+  print("current_time + 2")
+
+  while (time() < current_time + timeout):
+    leave_cmd.linear.x = 0.1
+    leave_pub.publish(leave_cmd)
+    #print("leaving gantry ")
+
+  leave_cmd.linear.x = 0
+  leave_pub.publish(leave_cmd)
+
+# drone_takeoff resets the drone and publishes a command to takeoff to the takeoff topic
+def drone_takeoff():
+  drone_reset()
+  takeoff_pub = rospy.Publisher('/bebop/takeoff', Empty, queue_size=10)
+  takeoff_cmd = Empty()
+  takeoff_pub.publish(takeoff_cmd)
+  sleep(3)
+
+# drone_lane publishes to the land topic to cause the drone to land
+def drone_land():
+
+  drone_reset()
+  land_pub = rospy.Publisher('/bebop/land', Empty, queue_size=10)
+  land_cmd =Empty()
+  land_pub.publish(land_cmd)
+  sleep(3)
+
+# Resets the drone, this is handy so multiple land/takeoff commands are not necessary
+def drone_reset():
+
+  reset_pub = rospy.Publisher('/bebop/reset', Empty, queue_size=10)
+  reset_cmd =Empty()
+  reset_pub.publish(reset_cmd)
+  sleep(3)
+
+# Takes a desired altitude in meters and invokes a callback that causes the drone to fly up or down
+def go_to_altitude(desired_altitude):
+
+  altitude_sub = rospy.Subscriber("/bebop/states/ardrone3/PilotingState/AltitudeChanged", Ardrone3PilotingStateAltitudeChanged, altitude_callback, (desired_altitude))
+  print("going again")
+
+# Callback for the above subscriber. Sends one command to the drone to fly up/down 0.1 max speed if the current altitude is not within 10 cm of the desired altitude
+def altitude_callback(data, args):
+
+  altitude = data.altitude
+  print('Current Altitude ', altitude)
+  desired_altitude = args
+  print('Desired Altitude ', desired_altitude)
+  flight_pub = rospy.Publisher('/bebop/cmd_vel', Twist, queue_size = 10)
+  flight_cmd = Twist()
+  if (altitude < desired_altitude - 0.1):
+    flight_cmd.linear.z = 0.2
+    flight_pub.publish(flight_cmd)
+    print("gaining altitude")
+
+  elif (altitude > desired_altitude + 0.1):
+    flight_cmd.linear.z = -0.2
+    flight_pub.publish(flight_cmd)
+    print("dropping altitude")
+
+  else:
+    flight_cmd.linear.z = 0
+    #return
+    flight_pub.publish(flight_cmd)
+    print("maintain altitude")
+
+
 # Setup an initial camera angle
 camera_angle = -70
-
 def main(args):
   # Initialise the node under the name image_converter
   rospy.init_node('image_converter', anonymous=True)
+
   # Assign the ic variable to the class type of image_converter
-  ic = image_converter()
-  # Keep running through until we stop it.
+  #ic = image_converter()
+  #drone_takeoff()
+  drone_takeoff()
+  drone_takeoff()
+  print("going inside")
+  go_to_altitude(2.0)
+  print('outside')
+
+
   try:
     rospy.spin()
   except KeyboardInterrupt:

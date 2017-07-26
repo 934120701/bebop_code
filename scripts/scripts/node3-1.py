@@ -46,7 +46,7 @@ class image_converter:
   # returns the new angle we need to publish to the topic
   def camera_angle_correction(self,aruco_code_center_pixel, current_angle_y):
 
-    position_error_x = 428 - aruco_code_center_pixel[0]
+    position_error_x = 488 - aruco_code_center_pixel[0]
     position_error_y = 240 - aruco_code_center_pixel[1]
   
     # Does some bounds checking as +/- 70 is maximum angle
@@ -91,7 +91,6 @@ class image_converter:
     except CvBridgeError as e:
       print(e)
     global camera_angle
-
     markerLength = 5
 
    #'''(rows,cols,channels) = cv_image.shape
@@ -122,17 +121,14 @@ class image_converter:
       # Draw on the markers so we can see they've been detected
       gray = aruco.drawDetectedMarkers(cv_image, corners, ids)
       rvec, tvec = aruco.estimatePoseSingleMarkers(corners, markerLength, mtx, dist)  # For a single marker
-      r33 = cv2.Rodrigues(rvec,jacobian=0)
-      print(r33[0])
       gray = aruco.drawAxis(gray, mtx, dist, rvec, tvec, 10)
-      cv_image = cv2.warpPerspective(gray, r33[0], (856, 480))
       aruco_code_center_pixel = self.tag_center(corners)
       camera_angle = self.camera_angle_correction(aruco_code_center_pixel, camera_angle)
       self.publish_the_message(camera_angle)
 
     # Display the video feed frames every 3 ms.
     cv2.imshow("Image window", cv_image)
-    cv2.waitKey(50) #5
+    cv2.waitKey(5)
 
     # Publish the image back into ROS image message type (not sure why, I guess it's if you
     # want to do something else with it after using OpenCV).
@@ -143,7 +139,7 @@ class image_converter:
       print(e)
 
 # Setup an initial camera angle
-camera_angle = -70
+camera_angle = 0
 
 def main(args):
   # Initialise the node under the name image_converter
