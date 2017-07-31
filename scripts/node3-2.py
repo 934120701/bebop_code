@@ -46,8 +46,8 @@ class image_converter:
   # position of the center pixel based on these, returning the two element list with x and y positions
   def tag_center(self, corners):
   
-    aruco_code_center_x = (corners[0][0][0][0] + corners[0][0][2][0])/2
-    aruco_code_center_y = (corners[0][0][0][1] + corners[0][0][2][1])/2
+    aruco_code_center_x = (corners[0][0] + corners[2][0])/2
+    aruco_code_center_y = (corners[0][1] + corners[2][1])/2
     aruco_code_center_pixel_position = [aruco_code_center_x, aruco_code_center_y]
     return aruco_code_center_pixel_position
 
@@ -96,8 +96,8 @@ class image_converter:
 
   # flys the Bebop towards an identified tag to place the tag at the bottom of the video feed
   def flight_commands_current_tag(self, aruco_code_center_pixel_position):
-    print("current")
-    rospy.loginfo("current")
+    #print("current")
+    #rospy.loginfo("current")
     if aruco_code_center_pixel_position[0] < 350:
       #turn anticlockwise
       self.flight_cmd.angular.z = 0.15
@@ -214,12 +214,13 @@ class image_converter:
   # function to return the highest tag id
   def highest_tag(self, ids):
     highest_id = 0
+    highest_id_index = 0
     for x in range(0, len(ids)):
       if ids[x] > highest_id:
         highest_id = ids[x]
+        highest_id_index = x
 
-    return highest_id
-
+    return highest_id, x
 
 
   def callback(self,data):
@@ -232,6 +233,8 @@ class image_converter:
     global camera_angle, count
     tvec = np.empty([])
     rvec= np.empty([])
+    highest_tag_index = 0
+    highest_tag_id = 0
 
     markerLength = 5
     count = count + 1
@@ -252,6 +255,7 @@ class image_converter:
     aruco_dict = aruco.Dictionary_get(aruco.DICT_6X6_250)
     parameters = aruco.DetectorParameters_create()
 
+
     # lists of ids and the corners belonging to each id
     corners, ids, rejectedImgPoints = aruco.detectMarkers(gray, aruco_dict, parameters=parameters)
 
@@ -266,9 +270,14 @@ class image_converter:
     if (len(corners) != 0):
       # Draw on the markers so we can see they've been detected
       gray = aruco.drawDetectedMarkers(cv_image, corners, ids)
-      print(self.highest_tag(ids))
-      self.aruco_code_center_pixel = self.tag_center(corners)
+      highest_tag_id, highest_tag_index = self.highest_tag(ids)
+      print(highest_tag_id, highest_tag_index)
+      print(corners)
+      print(corners[highest_tag_index][0])
+      self.aruco_code_center_pixel = self.tag_center(corners[highest_tag_index][0])
       previous_aruco_code_center_pixels = self.update_previous_aruco_code_center_pixels_list(self.aruco_code_center_pixel)
+      print("center", self.aruco_code_center_pixel)
+      cv2.circle(gray, (int(self.aruco_code_center_pixel[0]), int(self.aruco_code_center_pixel[1])), 10, (0, 0, 255), -1)
       #camera_angle = self.camera_angle_correction(aruco_code_center_pixel, camera_angle)
       camera_angle_birds_eye = -70
       self.publish_the_message(camera_angle_birds_eye)
@@ -325,13 +334,16 @@ def leave_gantry():
   leave_cmd.linear.x = 0
   leave_pub.publish(leave_cmd)
 
-# drone_takeoff resets the drone and publishes a command to takeoff to the takeoff topic
+# drone_takeoff resets the drone and publishes a command to takeoff to the takeoff topic and flys to given altitude
 def drone_takeoff():
   drone_reset()
   takeoff_pub = rospy.Publisher('/bebop/takeoff', Empty, queue_size=10)
   takeoff_cmd = Empty()
   takeoff_pub.publish(takeoff_cmd)
-  sleep(5)
+  takeoff_pub.publish(takeoff_cmd)
+  sleep(3)
+  go_to_altitude(1.5)
+  sleep(3)
 
 # drone_lane publishes to the land topic to cause the drone to land
 def drone_land():
@@ -379,17 +391,10 @@ def altitude_callback(data, args):
 # Setup an initial camera angle
 camera_angle = -70
 count = 0
+
 def main(args):
   # Initialise the node under the name image_converter
   rospy.init_node('image_converter', anonymous=True)
-
-  '''drone_takeoff()
-  drone_takeoff()
-  print("going inside")
-  go_to_altitude(1.5)
-  sleep(7)
-  print('outside')'''
-
   # Assign the ic variable to the class type of image_converter
   ic = image_converter()
 
