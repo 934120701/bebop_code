@@ -211,13 +211,27 @@ class image_converter:
     phi = np.arctan2(cartesian[1], cartesian[0])
     return(rho, phi)
 
+  # function to return the highest tag id
+  def highest_tag(self, ids):
+    highest_id = 0
+    for x in range(0, len(ids)):
+      if ids[x] > highest_id:
+        highest_id = ids[x]
+
+    return highest_id
+
+
 
   def callback(self,data):
+
     try:
       cv_image = self.bridge.imgmsg_to_cv2(data, "bgr8")
     except CvBridgeError as e:
       print(e)
+
     global camera_angle, count
+    tvec = np.empty([])
+    rvec= np.empty([])
 
     markerLength = 5
     count = count + 1
@@ -229,7 +243,7 @@ class image_converter:
     cv2.line(cv_image, (506, 0), (506, 480), 255, 2)
 
     with np.load('B.npz') as X:
-      mtx, dist, _, _ = [X[i] for i in ('mtx', 'dist', 'rvecs', 'tvecs')]
+      mtx, dist, rvecs, tvecs = [X[i] for i in ('mtx', 'dist', 'rvecs', 'tvecs')]
 
 
     # Make the image gray for ArUco tag detection
@@ -240,7 +254,6 @@ class image_converter:
 
     # lists of ids and the corners belonging to each id
     corners, ids, rejectedImgPoints = aruco.detectMarkers(gray, aruco_dict, parameters=parameters)
-    #aruco.drawDetectedMarkers(cv_image, corners, ids)
 
     camera_angle_birds_eye = -70
     self.publish_the_message(camera_angle_birds_eye)
@@ -253,30 +266,25 @@ class image_converter:
     if (len(corners) != 0):
       # Draw on the markers so we can see they've been detected
       gray = aruco.drawDetectedMarkers(cv_image, corners, ids)
-      rvec, tvec = aruco.estimatePoseSingleMarkers(corners, markerLength, mtx, dist)  # For a single marker
-      r33 = cv2.Rodrigues(rvec,jacobian=0)
-      #print(r33[0])
-      gray = aruco.drawAxis(gray, mtx, dist, rvec, tvec, 10)
-      #cv_image = cv2.warpPerspective(gray, r33[0], (856, 480))
+      print(self.highest_tag(ids))
       self.aruco_code_center_pixel = self.tag_center(corners)
       previous_aruco_code_center_pixels = self.update_previous_aruco_code_center_pixels_list(self.aruco_code_center_pixel)
-      #print(self.previous_aruco_code_center_pixels)
       #camera_angle = self.camera_angle_correction(aruco_code_center_pixel, camera_angle)
       camera_angle_birds_eye = -70
       self.publish_the_message(camera_angle_birds_eye)
       count = 0
       self.flight_commands_current_tag(self.aruco_code_center_pixel)
-      #print("Flying to known position")
 
 
     # if there was no tag detected in that frame, make sure we have at least 2 values in our previous_aruco_code_center_pixels
     # list before getting the direction vector
-    elif (self.previous_aruco_code_center_pixels[1] != None):
+    '''elif (self.previous_aruco_code_center_pixels[1] != None):
       direction_vector = self.aruco_tag_position_change(self.previous_aruco_code_center_pixels)
-      #print(direction_vector)
+      #print(direction_vector)'''
 
-    print("count: ", count)
-    rospy.loginfo("count: %d", count)
+    #print("count: ", count)
+    #rospy.loginfo("count: %d", count)
+    #rospy.loginfo("count: %d", count)
 
     """if (count <= 30):
       self.flight_commands_current_tag(self.aruco_code_center_pixel)
@@ -284,8 +292,8 @@ class image_converter:
 
     # if we haven't seen an ArUco tag in at least 30 frames, and no more than 300 frames ago, set the flight in the direction
     # calculated from the previous positions.
-    if (count > 30 and count <= 300 and self.previous_aruco_code_center_pixels[1] != None and len(corners) == 0):
-      self.flight_commands_previous_tags(direction_vector)
+    '''if (count > 30 and count <= 300 and self.previous_aruco_code_center_pixels[1] != None and len(corners) == 0):
+      self.flight_commands_previous_tags(direction_vector)'''
 
 
     # Display the video feed frames every 3 ms.
@@ -375,12 +383,12 @@ def main(args):
   # Initialise the node under the name image_converter
   rospy.init_node('image_converter', anonymous=True)
 
-  drone_takeoff()
+  '''drone_takeoff()
   drone_takeoff()
   print("going inside")
   go_to_altitude(1.5)
   sleep(7)
-  print('outside')
+  print('outside')'''
 
   # Assign the ic variable to the class type of image_converter
   ic = image_converter()
