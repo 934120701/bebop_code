@@ -172,6 +172,9 @@ include_directories(
    scripts/node2.py
    scripts/bustercode.py
    scripts/transform_example.py
+   scripts/bebop_main.py
+   scripts/bebop_functions.py
+   scripts/bebop_imports.py
    DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
  )
 
