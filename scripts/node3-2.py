@@ -41,6 +41,7 @@ class image_converter:
     self.flight_pub = rospy.Publisher('/bebop/cmd_vel', Twist, queue_size=10)
     self.aruco_code_center_pixel = None
     self.previous_aruco_code_center_pixels = deque([None] * 3)
+    self.highest_tag_id_list_with_positions = deque()
 
   # tag_center takes the values for the pixels of the corners of an identified ArUco tag and calculates the 
   # position of the center pixel based on these, returning the two element list with x and y positions
@@ -220,7 +221,22 @@ class image_converter:
         highest_id = ids[x]
         highest_id_index = x
 
-    return highest_id, x
+    return highest_id, highest_id_index
+
+  # used the list of highest IDs seen in the previous x number of frames and sets the highest ID and latest
+  # center pixel position as the target to fly to.
+  def target_tag(self):
+    target_id = None
+    target_position = []
+
+    for x in range(0, len(self.highest_tag_id_list_with_positions)):
+      if self.highest_tag_id_list_with_positions[x][0][0] >= target_id:
+        target_id = self.highest_tag_id_list_with_positions[x][0][0]
+        target_position = self.highest_tag_id_list_with_positions[x][1]
+
+    print("target_id", target_id, "target_position", target_position)
+
+    return target_id, target_position
 
 
   def callback(self,data):
@@ -258,6 +274,8 @@ class image_converter:
 
     # lists of ids and the corners belonging to each id
     corners, ids, rejectedImgPoints = aruco.detectMarkers(gray, aruco_dict, parameters=parameters)
+    for x in range(0, len(ids)):
+      print("id", ids[x], "center pixel", self.tag_center(corners[x][0]), "index", x)
 
     camera_angle_birds_eye = -70
     self.publish_the_message(camera_angle_birds_eye)
@@ -271,13 +289,25 @@ class image_converter:
       # Draw on the markers so we can see they've been detected
       gray = aruco.drawDetectedMarkers(cv_image, corners, ids)
       highest_tag_id, highest_tag_index = self.highest_tag(ids)
-      print(highest_tag_id, highest_tag_index)
-      print(corners)
-      print(corners[highest_tag_index][0])
+      print("highest_tag_id", highest_tag_id, "highest_tag_index", highest_tag_index)
+
       self.aruco_code_center_pixel = self.tag_center(corners[highest_tag_index][0])
+
+
+      if len(self.highest_tag_id_list_with_positions) == 30:
+        self.highest_tag_id_list_with_positions.popleft()
+
+      self.highest_tag_id_list_with_positions.append([highest_tag_id, self.aruco_code_center_pixel])
+
       previous_aruco_code_center_pixels = self.update_previous_aruco_code_center_pixels_list(self.aruco_code_center_pixel)
-      print("center", self.aruco_code_center_pixel)
-      cv2.circle(gray, (int(self.aruco_code_center_pixel[0]), int(self.aruco_code_center_pixel[1])), 10, (0, 0, 255), -1)
+
+      #print("list", self.highest_tag_id_list_with_positions)
+      target_tag_id, target_tag_position = self.target_tag()
+      #print("lastest addition", highest_tag_id)
+      #print("first list element", self.highest_tag_id_list_with_positions[0][0][0], "first list element second element first element", self.highest_tag_id_list_with_positions[0][1][0])
+      print(" ")
+
+      cv2.circle(gray, (int(target_tag_position[0]), int(target_tag_position[1])), 10, (0, 0, 255), -1)
       #camera_angle = self.camera_angle_correction(aruco_code_center_pixel, camera_angle)
       camera_angle_birds_eye = -70
       self.publish_the_message(camera_angle_birds_eye)
