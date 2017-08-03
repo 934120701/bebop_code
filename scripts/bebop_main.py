@@ -6,6 +6,7 @@ of the screen.
 '''
 from bebop_functions import *
 
+
 class image_converter:
 
   def __init__(self):
@@ -14,7 +15,7 @@ class image_converter:
     self.image_pub = rospy.Publisher("image_topic_2",Image, queue_size=10)
     self.message_pub = rospy.Publisher("/bebop/camera_control", Twist, queue_size=10)
     self.flight_pub = rospy.Publisher('/bebop/cmd_vel', Twist, queue_size=10)
-    self.cmd_vel = rospy.Publisher('/bebop/camera_control', Twist, queue_size=10)
+    self.camera_pub = rospy.Publisher('/bebop/camera_control', Twist, queue_size=10)
     self.image_sub = rospy.Subscriber("/bebop/image_raw",Image,self.callback)
 
     ''' Create the variables used across the functions in the class image_converter'''
@@ -26,6 +27,14 @@ class image_converter:
     self.highest_tag_id_list_with_positions = deque()
     self.target_tag_position = []
     self.target_tag_id = 0
+    self.m_pidY = PID_class(0.01,
+                      0.0,
+                      0.01,
+                      -2.0,
+                      4.0,
+                      -0.1,
+                      0.1)
+
 
   ''' tag_center takes the values for the pixels of the corners of an identified ArUco tag and calculates the 
   position of the center pixel based on these, returning the two element list with x and y positions'''
@@ -65,12 +74,12 @@ class image_converter:
     return new_angle_y
 
 
-  ''' publish_the_message takes the camera_angle we want to publish and publishes it to the camera_control topic'''
-  def publish_the_message(self, camera_angle):
+  ''' publish_camera takes the camera_angle we want to publish and publishes it to the camera_control topic'''
+  def publish_camera(self, camera_angle):
 
       ''' Only changes the y plane values, we could additionally add in x also'''
       self.pan_camera_cmd.angular.y = camera_angle
-      self.cmd_vel.publish(self.pan_camera_cmd)
+      self.camera_pub.publish(self.pan_camera_cmd)
 
 
   ''' Draw the coordinate lines on the image'''
@@ -230,8 +239,6 @@ class image_converter:
         target_id = self.highest_tag_id_list_with_positions[x][0][0]
         target_position = self.highest_tag_id_list_with_positions[x][1]
 
-    print("target_id", target_id, "target_position", target_position)
-
     return target_id, target_position
 
 
@@ -247,24 +254,38 @@ class image_converter:
     rvec= np.empty([])
     highest_tag_index = 0
     highest_tag_id = 0
+    first_tag_seen = False
 
     markerLength = 5
     count = count + 1
-    print(count)
+    #print(count)
     ''' Load the camera coefficients etc'''
 
     cv2.line(cv_image, (0, 350), (856, 350), 255, 2)
     cv2.line(cv_image, (350, 0), (350, 480), 255, 2)
     cv2.line(cv_image, (506, 0), (506, 480), 255, 2)
 
-    with np.load('B.npz') as X:
-      mtx, dist, rvecs, tvecs = [X[i] for i in ('mtx', 'dist', 'rvecs', 'tvecs')]
+    '''with np.load('B.npz') as X:
+      mtx, dist, rvecs, tvecs = [X[i] for i in ('mtx', 'dist', 'rvecs', 'tvecs')]'''
+
+    '''with open('calibration.yaml') as f:
+      loadeddict = yaml.load(f)
+    mtx = loadeddict.get('camera_matrix')
+    dist = loadeddict.get('dist_coeff')
+    rvecs = loadeddict.get('rvecs')
+    tvecs = loadeddict.get('tvecs')'''
+
+    mtx = rospy.get_param("~camera_matrix")
+    dist = rospy.get_param("~dist_coeff")
+    rvecs = rospy.get_param("~rvecs")
+    tvecs = rospy.get_param("~tvecs")
+
 
 
     ''' Make the image gray for ArUco tag detection'''
     gray = cv2.cvtColor(cv_image, cv2.COLOR_BGR2GRAY)
     ''' Assign the dictionary we wish to use (6 bit, with 250 separate tags)'''
-    aruco_dict = aruco.Dictionary_get(aruco.DICT_6X6_250)
+    aruco_dict = aruco.Dictionary_get(aruco.DICT_4X4_50)
     parameters = aruco.DetectorParameters_create()
 
 
@@ -273,8 +294,8 @@ class image_converter:
     '''for x in range(0, len(ids)):
       print("id", ids[x], "center pixel", self.tag_center(corners[x][0]), "index", x)'''
 
-    camera_angle_birds_eye = -70
-    self.publish_the_message(camera_angle_birds_eye)
+    #camera_angle_birds_eye = -70
+    #self.publish_camera(camera_angle_birds_eye)
 
 
     ''' This if statement lets us check if we have detected a tag by checking the size
@@ -306,13 +327,24 @@ class image_converter:
       #print("first list element", self.highest_tag_id_list_with_positions[0][0][0], "first list element second element first element", self.highest_tag_id_list_with_positions[0][1][0])
       print(" ")
       #camera_angle = self.camera_angle_correction(aruco_code_center_pixel, camera_angle)
-      camera_angle_birds_eye = -70
-      self.publish_the_message(camera_angle_birds_eye)
+      #camera_angle_birds_eye = -70
+      #self.publish_camera(camera_angle_birds_eye)
       count = 0
-      self.flight_commands_current_tag(self.aruco_code_center_pixel)
+      first_tag_seen = True
+      #self.flight_commands_current_tag(self.aruco_code_center_pixel)
 
-    if(count < 30):
+    if(count < 30 and first_tag_seen == True):
         cv2.circle(cv_image, (int(self.target_tag_position[0]), int(self.target_tag_position[1])), 10, (0, 0, 255), -1)
+        ''' Send the current value and the target value for the Y position of the tag to the PID function'''
+        #self.target_tag_position[1], 240
+        print("old camera angle: ", camera_angle)
+        print("target_tag_position: ", self.target_tag_position[1])
+        angle_change = self.m_pidY.update(self.target_tag_position[1], 240)
+        camera_angle = camera_angle + angle_change
+        print("angle_change: ", angle_change)
+        print("new camera angle: ", camera_angle)
+        self.publish_camera(camera_angle)
+
 
 
     ''' If there was no tag detected in that frame, make sure we have at least 2 values in our previous_aruco_code_center_pixels
@@ -350,7 +382,7 @@ class image_converter:
 
 
 # Setup an initial camera angle
-camera_angle = -70
+camera_angle = 0
 count = 0
 
 def main(args):
@@ -358,7 +390,10 @@ def main(args):
   ''' Initialise the node under the name image_converter'''
   rospy.init_node('image_converter', anonymous=True)
   ''' Assign the ic variable to the class type of image_converter'''
+  print(rospy.get_namespace())
   ic = image_converter()
+  '''drone_takeoff()
+  drone_takeoff()'''
 
   try:
     rospy.spin()

@@ -1,6 +1,6 @@
 import rospy                     # use Time 
 
-class PID (object):
+class PID_class (object):
 
    """This class treats controllers created to have PID control on a system."""
 
@@ -19,6 +19,7 @@ class PID (object):
       self.m_integral = 0
       self.m_previousError = 0
       self.m_previousTime = float(rospy.Time.to_sec(rospy.Time.now()))
+
 
    # reset of essential PID parameters
    def reset (self):
@@ -73,6 +74,7 @@ class PID (object):
       # save current error and time for the next cycle
       self.m_previousError = error
       self.m_previousTime = time
+      print("output: ", output)
 
       # assure that output value is within the max and min otherwise use the central value (max or min)
       return max(min(output, self.m_maxOutput), self.m_minOutput)

@@ -175,6 +175,7 @@ include_directories(
    scripts/bebop_main.py
    scripts/bebop_functions.py
    scripts/bebop_imports.py
+   scripts/pid.py
    DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
  )
 
