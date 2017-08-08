@@ -24,8 +24,8 @@ def drone_takeoff():
   takeoff_pub.publish(takeoff_cmd)
   takeoff_pub.publish(takeoff_cmd)
   sleep(3)
-  #go_to_altitude(1.5)
-  #sleep(3)
+  go_to_altitude(1.5)
+  sleep(5)
 
 # drone_lane publishes to the land topic to cause the drone to land
 def drone_land():

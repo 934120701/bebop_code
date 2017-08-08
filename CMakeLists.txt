@@ -173,6 +173,7 @@ include_directories(
    scripts/bustercode.py
    scripts/transform_example.py
    scripts/bebop_main.py
+   scripts/bebop_main_follow_tags.py
    scripts/bebop_functions.py
    scripts/bebop_imports.py
    scripts/pid.py

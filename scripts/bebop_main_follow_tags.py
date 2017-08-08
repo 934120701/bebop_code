@@ -30,11 +30,18 @@ class image_converter:
         self.highest_tag_id_list_with_positions = deque()
         self.target_tag_position = []
         self.target_tag_id = 0
+        self.m_pidX = PID_class(0.0008,
+                                0.0,
+                                0.01,
+                                -0.1,
+                                0.1,
+                                -0.1,
+                                0.1)
         self.m_pidY = PID_class(0.0008,
                                 0.0,
                                 0.01,
-                                -2.0,
-                                4.0,
+                                -0.1,
+                                0.1,
                                 -0.1,
                                 0.1)
         
@@ -304,8 +311,8 @@ class image_converter:
         '''for x in range(0, len(ids)):
       print("id", ids[x], "center pixel", self.tag_center(corners[x][0]), "index", x)'''
 
-        #camera_angle_birds_eye = -70
-        # self.publish_camera(camera_angle_birds_eye)
+        camera_angle_birds_eye = -70
+        self.publish_camera(camera_angle_birds_eye)
 
         ''' This if statement lets us check if we have detected a tag by checking the size
     of the corners list to see if it's greater than 0. If it is, then we want to
@@ -349,24 +356,17 @@ class image_converter:
                 self.target_tag_position[1])), 10, (0, 0, 255), -1)
             ''' Send the current value and the target value for the Y position of the tag to the PID function'''
             #self.target_tag_position[1], 240
-            print("angular.z: ", self.flight_cmd.angular.z)
-            print("target_tag_position: ", self.target_tag_position[1])
-            change = self.m_pidY.update(self.target_tag_position[0], 428)
-            '''if (self.flight_cmd.angular.z + change < 1 and self.flight_cmd.angular.z + change > -0.2):
-                self.flight_cmd.angular.z = self.flight_cmd.angular.z + change
-            elif (self.flight_cmd.angular.z + change > 0.2):
-                self.flight_cmd.angular.z = 0.2
-            else:
-                self.flight_cmd.angular.z = -0.2'''
-            self.flight_cmd.angular.z = change
-            self.flight_cmd.linear.x = 0
-            self.flight_cmd.linear.y = 0
+            print("target_tag_position: ", self.target_tag_position[0], self.target_tag_position[1])
+
+            self.flight_cmd.linear.y = self.m_pidX.update(self.target_tag_position[0], 428)
+            self.flight_cmd.linear.x = self.m_pidY.update(self.target_tag_position[1], 320)
+            print("x (forward) and y (side) commands", self.flight_cmd.linear.x, self.flight_cmd.linear.y)
+
+            self.flight_cmd.angular.z = 0
             self.flight_cmd.linear.z = 0
 
             self.flight_pub.publish(self.flight_cmd)
 
-            print("change: ", change)
-            print("new angular vel: ", self.flight_cmd.angular.z)
             #self.publish_camera(camera_angle)
         elif(count > 30):
             self.flight_cmd.angular.z = 0
@@ -408,7 +408,7 @@ class image_converter:
 
 
 # Setup an initial camera angle
-camera_angle = 0
+camera_angle = -70
 count = 0
 
 
@@ -418,8 +418,8 @@ def main(args):
     ''' Assign the ic variable to the class type of image_converter'''
     print(rospy.get_namespace())
     ic = image_converter()
-    drone_takeoff()
-    drone_takeoff()
+    #drone_takeoff()
+    #drone_takeoff()
 
     try:
         rospy.spin()
