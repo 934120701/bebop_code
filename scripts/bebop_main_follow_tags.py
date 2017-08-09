@@ -23,25 +23,27 @@ class image_converter:
 
         ''' Create the variables used across the functions in the class image_converter'''
         self.bridge = CvBridge()
-        self.pan_camera_cmd = Twist()
-        self.flight_cmd = Twist()
-        self.aruco_code_center_pixel = None
-        self.previous_aruco_code_center_pixels = deque([None] * 3)
-        self.highest_tag_id_list_with_positions = deque()
-        self.target_tag_position = []
-        self.target_tag_id = 0
-        self.m_pidX = PID_class(0.0008,
+        self.panCameraCmd = Twist()
+        self.flightCmd = Twist()
+        self.highestTagCenterPixel = None
+        self.lowestTagCenterPixel = None
+        self.previousArucoCodeCenterPixels = deque([None] * 3)
+        self.highestTagIdListWithPositions = deque()
+        self.lowestTagIdListWithPositions = deque()
+        self.targetTagPosition = []
+        self.targetTagId = 0
+        self.m_pidX = PID_class(0.001,
                                 0.0,
-                                0.01,
-                                -0.1,
-                                0.1,
+                                0.008,
+                                -0.08,
+                                0.08,
                                 -0.1,
                                 0.1)
-        self.m_pidY = PID_class(0.0008,
+        self.m_pidY = PID_class(0.001,
                                 0.0,
-                                0.01,
-                                -0.1,
-                                0.1,
+                                0.008,
+                                -0.08,
+                                0.08,
                                 -0.1,
                                 0.1)
         
@@ -50,178 +52,176 @@ class image_converter:
 
     def tag_center(self, corners):
 
-        aruco_code_center_x = (corners[0][0] + corners[2][0]) / 2
-        aruco_code_center_y = (corners[0][1] + corners[2][1]) / 2
-        aruco_code_center_pixel_position = [
-            aruco_code_center_x, aruco_code_center_y]
-        return aruco_code_center_pixel_position
+        arucoCodeCenterX = (corners[0][0] + corners[2][0]) / 2
+        arucoCodeCenterY = (corners[0][1] + corners[2][1]) / 2
+        arucoCodeCenterPixelPosition = [arucoCodeCenterX, arucoCodeCenterY]
+        return arucoCodeCenterPixelPosition
 
     ''' camera_angle_correction takes the ArUco code center pixel position and the current angle of the camera
   calculates whether we need to pan up or down to move the ArUco tag to the center of the screen
   returns the new angle we need to publish to the topic'''
 
-    def camera_angle_correction(self, aruco_code_center_pixel_position, current_angle_y):
+    def camera_angle_correction(self, arucoCodeCenterPixelPosition, currentAngleY):
 
-        position_error_x = 428 - aruco_code_center_pixel_position[0]
-        position_error_y = 240 - aruco_code_center_pixel_position[1]
+        positionErrorX = 428 - arucoCodeCenterPixelPosition[0]
+        positionErrorY = 240 - arucoCodeCenterPixelPosition[1]
 
         ''' Does some bounds checking as +/- 70 is maximum angle'''
-        if ((position_error_y > 0) and (current_angle_y <= 65) and (current_angle_y >= -65)):
-            if current_angle_y == 65:
-                new_angle_y = current_angle_y
+        if ((positionErrorY > 0) and (currentAngleY <= 65) and (currentAngleY >= -65)):
+            if currentAngleY == 65:
+                newAngleY = currentAngleY
             else:
-                new_angle_y = current_angle_y + 1
+                newAngleY = currentAngleY + 1
 
-        elif ((position_error_y < 0) and (current_angle_y - 1 <= 65) and (current_angle_y - 1 >= -65)):
-            if current_angle_y == -65:
-                new_angle_y = current_angle_y
+        elif ((positionErrorY < 0) and (currentAngleY - 1 <= 65) and (currentAngleY - 1 >= -65)):
+            if currentAngleY == -65:
+                newAngleY = currentAngleY
             else:
-                new_angle_y = current_angle_y - 1
+                newAngleY = currentAngleY - 1
 
-            ''' If the new_angle_y is going to go out of bounds, set it equal to the current angle'''
+            ''' If the newAngleY is going to go out of bounds, set it equal to the current angle'''
         else:
-            new_angle_y = current_angle_y
+            newAngleY = currentAngleY
 
-        return new_angle_y
+        return newAngleY
 
     ''' publish_camera takes the camera_angle we want to publish and publishes it to the camera_control topic'''
 
-    def publish_camera(self, camera_angle):
+    def publish_camera(self, cameraAngle):
         ''' Only changes the y plane values, we could additionally add in x also'''
-        self.pan_camera_cmd.angular.y = camera_angle
-        self.camera_pub.publish(self.pan_camera_cmd)
+        self.panCameraCmd.angular.y = cameraAngle
+        self.camera_pub.publish(self.panCameraCmd)
 
     ''' Draw the coordinate lines on the image'''
-    def draw(img, corners, imgpts):
+    def draw(img, corners, imgPts):
 
         corner = tuple(corners[0].ravel())
-        img = cv2.line(img, corner, tuple(imgpts[0].ravel()), (255, 0, 0), 5)
-        img = cv2.line(img, corner, tuple(imgpts[1].ravel()), (0, 255, 0), 5)
-        img = cv2.line(img, corner, tuple(imgpts[2].ravel()), (0, 0, 255), 5)
+        img = cv2.line(img, corner, tuple(imgPts[0].ravel()), (255, 0, 0), 5)
+        img = cv2.line(img, corner, tuple(imgPts[1].ravel()), (0, 255, 0), 5)
+        img = cv2.line(img, corner, tuple(imgPts[2].ravel()), (0, 0, 255), 5)
         return img
 
     ''' Flys the Bebop towards an identified tag to place the tag at the bottom of the video feed'''
 
-    def flight_commands_current_tag(self, aruco_code_center_pixel_position):
+    def flight_commands_current_tag(self, arucoCodeCenterPixelPosition):
 
         # print("current")
         # rospy.loginfo("current")
-        if aruco_code_center_pixel_position[0] < 350:
+        if arucoCodeCenterPixelPosition[0] < 350:
             # turn anticlockwise
-            self.flight_cmd.angular.z = 0.15
-            self.flight_cmd.linear.x = 0
+            self.flightCmd.angular.z = 0.15
+            self.flightCmd.linear.x = 0
             # print("anticlockwise")
-        elif aruco_code_center_pixel_position[0] > 506:
+        elif arucoCodeCenterPixelPosition[0] > 506:
             # turn clockwise
-            self.flight_cmd.angular.z = -0.15
-            self.flight_cmd.linear.x = 0
+            self.flightCmd.angular.z = -0.15
+            self.flightCmd.linear.x = 0
            # print("clockwise")
-        elif aruco_code_center_pixel_position[0] < 506 and aruco_code_center_pixel_position[0] > 350 and aruco_code_center_pixel_position[1] < 350:
+        elif arucoCodeCenterPixelPosition[0] < 506 and arucoCodeCenterPixelPosition[0] > 350 and arucoCodeCenterPixelPosition[1] < 350:
             # fly forwards
-            self.flight_cmd.angular.z = 0
-            self.flight_cmd.linear.x = 0.04
+            self.flightCmd.angular.z = 0
+            self.flightCmd.linear.x = 0.04
             # print("forwards")
         else:
             # hover
-            self.flight_cmd.angular.z = 0
-            self.flight_cmd.linear.x = 0
-            self.flight_cmd.linear.y = 0
-            self.flight_cmd.linear.z = 0
+            self.flightCmd.angular.z = 0
+            self.flightCmd.linear.x = 0
+            self.flightCmd.linear.y = 0
+            self.flightCmd.linear.z = 0
 
             # print("hover")
 
-        self.flight_pub.publish(self.flight_cmd)
+        self.flight_pub.publish(self.flightCmd)
 
     ''' Flight_commands_previous_tags takes in the direction vector and calculates values for the x and y velocity
   of the drone in order to navigate it back in the direction the last ArUco tag was lost'''
 
-    def flight_commands_previous_tags(self, direction_vector):
+    def flight_commands_previous_tags(self, directionVector):
 
         print("past")
         rospy.loginfo("past")
-        print(direction_vector[0], direction_vector[1])
+        print(directionVector[0], directionVector[1])
 
         ''' Calculate the rate of the x and y components in the video feed to each other'''
-        ratio_x = abs(direction_vector[
-                      0]) * (0.05 / (abs(direction_vector[0]) + abs(direction_vector[1])))
-        ratio_y = abs(direction_vector[
-                      1]) * (0.05 / (abs(direction_vector[0]) + abs(direction_vector[1])))
-        rospy.loginfo("direction_vector: %d  %d",
-                      direction_vector[0], direction_vector[1])
-        print("x: %f ", ratio_x)
-        print("y: %f ", ratio_y)
-        rospy.loginfo("ratio_x: %f   ratio_y: %f", ratio_x, ratio_y)
+        ratioX = abs(directionVector[
+                      0]) * (0.05 / (abs(directionVector[0]) + abs(directionVector[1])))
+        ratioY = abs(directionVector[
+                      1]) * (0.05 / (abs(directionVector[0]) + abs(directionVector[1])))
+        rospy.loginfo("directionVector: %d  %d",
+                      directionVector[0], directionVector[1])
+        print("x: %f ", ratioX)
+        print("y: %f ", ratioY)
+        rospy.loginfo("ratioX: %f   ratioY: %f", ratioX, ratioY)
 
         ''' Set the larger ratio to a maximum of 0.05 velocity and scale the other lower'''
-        if (ratio_x < ratio_y):
-            multiplier = 0.05 / ratio_y
-            ratio_y = ratio_y * multiplier
-            ratio_x = ratio_x * multiplier
+        if (ratioX < ratioY):
+            multiplier = 0.05 / ratioY
+            ratioY = ratioY * multiplier
+            ratioX = ratioX * multiplier
 
         else:
-            multiplier = 0.05 / ratio_x
-            ratio_y = ratio_y * multiplier
-            ratio_x = ratio_x * multiplier
+            multiplier = 0.05 / ratioX
+            ratioY = ratioY * multiplier
+            ratioX = ratioX * multiplier
 
-        print("x: %f ", ratio_x)
-        print("y: %f ", ratio_y)
+        print("x: %f ", ratioX)
+        print("y: %f ", ratioY)
         rospy.loginfo(
-            "ratio_x multiplied: %f   ratio_y multiplied: %f ", ratio_x, ratio_y)
+            "ratioX multiplied: %f   ratioY multiplied: %f ", ratioX, ratioY)
 
         ''' If the direction vector for the x coordinate in the feed is less than 0, the ArUco tag will have disappeared to
     the left, therefore we need to fly the drone left (positive y in the drone's coordinates) to rediscover the tag.
     If it's positive, the tag disappeared to the right, so we should fly the drone to the right (negative y in the
     drone's coordinate system).'''
         if direction_vector[0] < 0:
-            self.flight_cmd.linear.x = + ratio_y
+            self.flightCmd.linear.x = + ratioYratioY
         else:
-            self.flight_cmd.linear.x = - ratio_y
+            self.flightCmd.linear.x = - ratioY
 
         ''' If the direction vector for the y coordinate in the feed is less than 0, the ArUco tag will have disappeared to
     at the top of the feed, therefore we need to fly forwards to rediscover the tag. If it's positive, the tag
     went off at the bottom of the feed and we therefore need to fly backwards to rediscover the tag.'''
         if direction_vector[1] < 0:
-            self.flight_cmd.linear.y = ratio_x
+            self.flightCmd.linear.y = ratioX
         else:
-            self.flight_cmd.linear.y = - ratio_x
+            self.flightCmd.linear.y = - ratioX
 
-        self.flight_cmd.angular.z = 0
-        self.flight_cmd.linear.z = 0
+        self.flightCmd.angular.z = 0
+        self.flightCmd.linear.z = 0
 
-        self.flight_pub.publish(self.flight_cmd)
+        self.flight_pub.publish(self.flightCmd)
 
     ''' Adds a new tag position to the list the holds the last 3 detected positions and returns the list'''
 
-    def update_previous_aruco_code_center_pixels_list(self, aruco_code_center_pixel_position):
+    def update_previous_aruco_code_center_pixels_list(self, arucoCodeCenterPixelPosition):
         ''' If the 3 element list is full, pop the value at element 0 before appending the next position'''
-        if type(self.previous_aruco_code_center_pixels[2]) != None:
-            self.previous_aruco_code_center_pixels.popleft()
-        self.previous_aruco_code_center_pixels.append(
-            aruco_code_center_pixel_position)
+        if type(self.previousArucoCodeCenterPixels[2]) != None:
+            self.previousArucoCodeCenterPixels.popleft()
+        self.previousArucoCodeCenterPixels.append(arucoCodeCenterPixelPosition)
 
-        return self.previous_aruco_code_center_pixels
+        return self.previousArucoCodeCenterPixels
 
     ''' Calculate the vector for the change in ArUco tag position from either the 0 and 3rd element or 0 and 1st element
-  if the list contains only 2 positions. Returns the position_change_vector (direction_change vector).'''
+  if the list contains only 2 positions. Returns the positionChangeVector (direction_change vector).'''
 
-    def aruco_tag_position_change(self, previous_aruco_code_center_pixels):
+    def aruco_tag_position_change(self, previousArucoCodeCenterPixels):
 
-        position_change_vector = []
+        positionChangeVector = []
 
         ''' If the 3rd element in the list is a list, we can use the last and the 3rd from last positions of the tag.'''
-        if type(previous_aruco_code_center_pixels[2]) == list:
-            position_change_vector = [previous_aruco_code_center_pixels[2][0] - previous_aruco_code_center_pixels[0][0],
-                                      previous_aruco_code_center_pixels[2][1] - previous_aruco_code_center_pixels[0][1]]
+        if type(previousArucoCodeCenterPixels[2]) == list:
+            positionChangeVector = [previousArucoCodeCenterPixels[2][0] - previousArucoCodeCenterPixels[0][0],
+                                      previousArucoCodeCenterPixels[2][1] - previousArucoCodeCenterPixels[0][1]]
             '''elif the 3rd element in the list if not a list (therefore is = None), we should use the 1st and second elements
     to calculate the position change vector.'''
-        elif (type(previous_aruco_code_center_pixels[2]) != list and type(previous_aruco_code_center_pixels[1]) == list):
-            position_change_vector = [previous_aruco_code_center_pixels[1][0] - previous_aruco_code_center_pixels[0][0],
-                                      previous_aruco_code_center_pixels[1][1] - previous_aruco_code_center_pixels[0][1]]
+        elif (type(previousArucoCodeCenterPixels[2]) != list and type(previousArucoCodeCenterPixels[1]) == list):
+            positionChangeVector = [previousArucoCodeCenterPixels[1][0] - previousArucoCodeCenterPixels[0][0],
+                                      previousArucoCodeCenterPixels[1][1] - previousArucoCodeCenterPixels[0][1]]
 
             ''' If for some reason we don't have 2 previous tag positions to calculate with, set the vector to None.'''
         else:
-            position_change_vector = None
-        return position_change_vector
+            positionChangeVector = None
+        return positionChangeVector
 
     ''' Conversion from x and y cartesian coordinates to distance and angle in polar'''
 
@@ -233,33 +233,49 @@ class image_converter:
 
     ''' Function to return the highest tag id'''
 
-    def highest_tag(self, ids):
+    def highest_or_lowest_tag(self, ids, headHome):
 
-        highest_id = [0]
-        highest_id_index = 0
-        for x in range(0, len(ids)):
-            if ids[x] > highest_id:
-                highest_id = ids[x]
-                highest_id_index = x
+        tagId = [0]
+        tagIndex = 0
 
-        return highest_id, highest_id_index
+        if (headHome = False):
+            for x in range(0, len(ids)):
+                if ids[x] > tagId:
+                    tagId = ids[x]
+                    tagIndex = x
+        else:
+            for x in range(0, len(ids)):
+                if ids[x] < tagId:
+                    tagId = ids[x]
+                    tagIndex = x
+
+        return tagId, tagIndex
 
     ''' Used the list of highest IDs seen in the previous x number of frames and sets the highest ID and latest
   center pixel position as the target to fly to.'''
 
-    def target_tag(self):
+    def target_tag(self, headHome):
 
-        target_id = None
-        target_position = []
+        targetId = None
+        targetPosition = []
 
-        for x in range(0, len(self.highest_tag_id_list_with_positions)):
-            #print("x = ", x)
-            # print(self.highest_tag_id_list_with_positions[x][0][0])
-            if self.highest_tag_id_list_with_positions[x][0][0] >= target_id:
-                target_id = self.highest_tag_id_list_with_positions[x][0][0]
-                target_position = self.highest_tag_id_list_with_positions[x][1]
+        if (headHome == False):
+            for x in range(0, len(self.highestTagIdListWithPositions)):
+                #print("x = ", x)
+                # print(self.highestTagIdListWithPositions[x][0][0])
+                if self.highestTagIdListWithPositions[x][0][0] >= targetId:
+                    targetId = self.highestTagIdListWithPositions[x][0][0]
+                    targetPosition = self.highestTagIdListWithPositions[x][1]
 
-        return target_id, target_position
+        else:
+            for x in range(0, len(self.lowestTagIdListWithPositions)):
+                #print("x = ", x)
+                # print(self.highestTagIdListWithPositions[x][0][0])
+                if self.lowestTagIdListWithPositions[x][0][0] >= targetId:
+                    targetId = self.lowestTagIdListWithPositions[x][0][0]
+                    targetPosition = self.lowestTagIdListWithPositions[x][1]
+
+        return targetId, targetPosition
 
     def callback(self, data):
 
@@ -268,32 +284,22 @@ class image_converter:
         except CvBridgeError as e:
             print(e)
 
-        global camera_angle, count
+        global camera_angle, count, headHome
         tvec = np.empty([])
         rvec = np.empty([])
-        highest_tag_index = 0
-        highest_tag_id = 0
-        first_tag_seen = False
+        highestTagIndex = 0
+        highestTagId = 0
+        firstTagSeen = False
+        badBoiTagId = 10
 
         markerLength = 5
         count = count + 1
-        # print(count)
-        ''' Load the camera coefficients etc'''
 
-        cv2.line(cv_image, (0, 350), (856, 350), 255, 2)
-        cv2.line(cv_image, (350, 0), (350, 480), 255, 2)
-        cv2.line(cv_image, (506, 0), (506, 480), 255, 2)
+        cv2.line(cv_image, (0, 320), (856, 320), 255, 2)
+        cv2.line(cv_image, (428, 0), (428, 480), 255, 2)
+    
 
-        '''with np.load('B.npz') as X:
-      mtx, dist, rvecs, tvecs = [X[i] for i in ('mtx', 'dist', 'rvecs', 'tvecs')]'''
-
-        '''with open('calibration.yaml') as f:
-      loadeddict = yaml.load(f)
-    mtx = loadeddict.get('camera_matrix')
-    dist = loadeddict.get('dist_coeff')
-    rvecs = loadeddict.get('rvecs')
-    tvecs = loadeddict.get('tvecs')'''
-
+        ''' Load in the camera cooefficients from the calibration.yaml file in config folder'''
         mtx = rospy.get_param("~camera_matrix")
         dist = rospy.get_param("~dist_coeff")
         rvecs = rospy.get_param("~rvecs")
@@ -301,84 +307,87 @@ class image_converter:
 
         ''' Make the image gray for ArUco tag detection'''
         gray = cv2.cvtColor(cv_image, cv2.COLOR_BGR2GRAY)
-        ''' Assign the dictionary we wish to use (6 bit, with 250 separate tags)'''
-        aruco_dict = aruco.Dictionary_get(aruco.DICT_4X4_50)
+        ''' Assign the dictionary we wish to use (4 bit, with 50 separate tags)'''
+        arucoDict = aruco.Dictionary_get(aruco.DICT_4X4_50)
         parameters = aruco.DetectorParameters_create()
 
         ''' Lists of ids and the corners belonging to each id'''
-        corners, ids, rejectedImgPoints = aruco.detectMarkers(
-            gray, aruco_dict, parameters=parameters)
-        '''for x in range(0, len(ids)):
-      print("id", ids[x], "center pixel", self.tag_center(corners[x][0]), "index", x)'''
+        corners, ids, rejectedImgPoints = aruco.detectMarkers(gray, arucoDict, parameters=parameters)
 
-        camera_angle_birds_eye = -70
-        self.publish_camera(camera_angle_birds_eye)
+        cameraAngleBirdsEye = -70
+        self.publish_camera(cameraAngleBirdsEye)
 
         ''' This if statement lets us check if we have detected a tag by checking the size
-    of the corners list to see if it's greater than 0. If it is, then we want to
-    find the center position of the tag and then correct the camera angle to center
-    it by publishing back a new angle to the control_camera topic.'''
+         of the corners list to see if it's greater than 0. If it is, then we want to
+        find the center position of the tag and then correct the camera angle to center
+        it by publishing back a new angle to the control_camera topic.'''
         if (len(corners) != 0):
             ''' Draw on the markers so we can see they've been detected'''
-            # print(corners)
             gray = aruco.drawDetectedMarkers(cv_image, corners, ids)
-            highest_tag_id, highest_tag_index = self.highest_tag(ids)
-            #print("highest_tag_id", highest_tag_id, "highest_tag_index", highest_tag_index)
 
-            self.aruco_code_center_pixel = self.tag_center(
-                corners[highest_tag_index][0])
+            if (headHome = False):
+                highestTagId, highestTagIndex = self.highest_or_lowest_tag(ids, headHome)
+                self.highestTagCenterPixel = self.tag_center(corners[highestTagIndex][0])
 
-            if len(self.highest_tag_id_list_with_positions) == 30:
-                self.highest_tag_id_list_with_positions.popleft()
+                if len(self.highestTagIdListWithPositions) == 30:
+                    self.highestTagIdListWithPositions.popleft()
 
-            self.highest_tag_id_list_with_positions.append(
-                [highest_tag_id, self.aruco_code_center_pixel])
+                self.highestTagIdListWithPositions.append([highestTagId, self.highestTagCenterPixel])
 
-            previous_aruco_code_center_pixels = self.update_previous_aruco_code_center_pixels_list(
-                self.aruco_code_center_pixel)
+                previousArucoCodeCenterPixels = self.update_previous_aruco_code_center_pixels_list(self.highestTagCenterPixel)
 
-            #print("list", self.highest_tag_id_list_with_positions)
-            #print(type(self.highest_tag_id_list_with_positions), len(self.highest_tag_id_list_with_positions))
-            # print(self.highest_tag_id_list_with_positions[0])
-            self.target_tag_id, self.target_tag_position = self.target_tag()
-            #print("lastest addition", highest_tag_id)
-            #print("first list element", self.highest_tag_id_list_with_positions[0][0][0], "first list element second element first element", self.highest_tag_id_list_with_positions[0][1][0])
+                self.targetTagId, self.targetTagPosition = self.target_tag(headHome)
+
+                ''' Check to see if the BadBoi tag is within 20 pixels square of the desired pixel position, if it is we have arrived and it's time
+                to head back '''
+                if((self.targetTagId == badBoiTagId) and (abs(targetTagPosition[0] - 428) < 20) and (abs(targetTagPosition[1] - 320) < 20)):
+                    print("Reached BadBoi")
+                    headHome = True
+
+            else:
+                lowestTagId, lowestTagIndex = self.highest_or_lowest_tag(ids, headHome)
+                self.lowestTagCenterPixel = self.tag_center(corners[lowestTagIndex][0])
+
+                if len(self.lowestTagIdListWithPositions) == 30:
+                    self.lowestTagIdListWithPositions.popleft()
+
+                self.lowestTagIdListWithPositions.append([lowestTagId, self.lowestTagCenterPixel])
+                self.targetTagId, self.targetTagPosition = self.target_tag(headHome)
+
+
             print(" ")
-            #camera_angle = self.camera_angle_correction(aruco_code_center_pixel, camera_angle)
-            #camera_angle_birds_eye = -70
-            # self.publish_camera(camera_angle_birds_eye)
             count = 0
-            first_tag_seen = True
-            # self.flight_commands_current_tag(self.aruco_code_center_pixel)
+            firstTagSeen = True
 
-        if(count < 30 and first_tag_seen == True):
-            cv2.circle(cv_image, (int(self.target_tag_position[0]), int(
-                self.target_tag_position[1])), 10, (0, 0, 255), -1)
+        ''' if to check if we've seen a tag in the last 30 frames '''
+        if(count < 30 and firstTagSeen == True):
+            cv2.circle(cv_image, (int(self.targetTagPosition[0]), int(self.targetTagPosition[1])), 10, (0, 0, 255), -1)
             ''' Send the current value and the target value for the Y position of the tag to the PID function'''
-            #self.target_tag_position[1], 240
-            print("target_tag_position: ", self.target_tag_position[0], self.target_tag_position[1])
+            print("targetTagPosition: ", self.targetTagPosition[0], self.targetTagPosition[1])
 
-            self.flight_cmd.linear.y = self.m_pidX.update(self.target_tag_position[0], 428)
-            self.flight_cmd.linear.x = self.m_pidY.update(self.target_tag_position[1], 320)
-            print("x (forward) and y (side) commands", self.flight_cmd.linear.x, self.flight_cmd.linear.y)
+            ''' Send the positions of the tag we wish to fly to to the PID update function to get new velocities '''
+            self.flightCmd.linear.y = self.m_pidX.update(self.targetTagPosition[0], 428)
+            self.flightCmd.linear.x = self.m_pidY.update(self.targetTagPosition[1], 320)
+            print("x (forward) and y (side) commands", self.flightCmd.linear.x, self.flightCmd.linear.y)
 
-            self.flight_cmd.angular.z = 0
-            self.flight_cmd.linear.z = 0
+            ''' Set the angular.z and linear.z to 0 as we don't wish to use these velocities and the publish to
+            the cmd_vel topic '''
+            self.flightCmd.angular.z = 0
+            self.flightCmd.linear.z = 0
+            self.flight_pub.publish(self.flightCmd)
 
-            self.flight_pub.publish(self.flight_cmd)
-
-            #self.publish_camera(camera_angle)
+        ''' if we haven't seen a tag in the last 30 frames then hover '''
         elif(count > 30):
-            self.flight_cmd.angular.z = 0
-            self.flight_cmd.linear.x = 0
-            self.flight_cmd.linear.y = 0
-            self.flight_cmd.linear.z = 0
-            self.flight_pub.publish(self.flight_cmd)
+            self.flightCmd.angular.z = 0
+            self.flightCmd.linear.x = 0
+            self.flightCmd.linear.y = 0
+            self.flightCmd.linear.z = 0
+            self.flight_pub.publish(self.flightCmd)
 
-        ''' If there was no tag detected in that frame, make sure we have at least 2 values in our previous_aruco_code_center_pixels
+        ''' If there was no tag detected in that frame, make sure we have at least 2 values in our previousArucoCodeCenterPixels
      list before getting the direction vector'''
-        '''elif (self.previous_aruco_code_center_pixels[1] != None):
-      direction_vector = self.aruco_tag_position_change(self.previous_aruco_code_center_pixels)
+        '''elif (self.previousArucoCodeCenterPixels[1] != None):
+      direction_vector = self.aruco_tag_position_change(self.previousArucoCodeCenterPixels)
       #print(direction_vector)'''
 
         #print("count: ", count)
@@ -386,12 +395,12 @@ class image_converter:
         #rospy.loginfo("count: %d", count)
 
         """if (count <= 30):
-      self.flight_commands_current_tag(self.aruco_code_center_pixel)
+      self.flight_commands_current_tag(self.highestTagCenterPixel)
       print("Flying to known position")"""
 
         # if we haven't seen an ArUco tag in at least 30 frames, and no more than 300 frames ago, set the flight in the direction
         # calculated from the previous positions.
-        '''if (count > 30 and count <= 300 and self.previous_aruco_code_center_pixels[1] != None and len(corners) == 0):
+        '''if (count > 30 and count <= 300 and self.previousArucoCodeCenterPixels[1] != None and len(corners) == 0):
       self.flight_commands_previous_tags(direction_vector)'''
 
         '''Display the video feed frames every 3 ms.'''
@@ -399,7 +408,7 @@ class image_converter:
         cv2.waitKey(5)  # 5
 
         ''' Publish the image back into ROS image message type (not sure why, I guess it's if you
-    want to do something else with it after using OpenCV).'''
+        want to do something else with it after using OpenCV).'''
         try:
             self.image_pub.publish(self.bridge.cv2_to_imgmsg(cv_image, "bgr8"))
 
@@ -408,8 +417,9 @@ class image_converter:
 
 
 # Setup an initial camera angle
-camera_angle = -70
+cameraAngle = -70
 count = 0
+headHome = False
 
 
 def main(args):
@@ -417,9 +427,11 @@ def main(args):
     rospy.init_node('image_converter', anonymous=True)
     ''' Assign the ic variable to the class type of image_converter'''
     print(rospy.get_namespace())
+    #drone_takeoff()
+    #go_to_altitude(1.2)
+    #sleep(5)
     ic = image_converter()
-    #drone_takeoff()
-    #drone_takeoff()
+
 
     try:
         rospy.spin()
