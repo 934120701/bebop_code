@@ -418,8 +418,8 @@ def main(args):
     ''' Assign the ic variable to the class type of image_converter'''
     print(rospy.get_namespace())
     ic = image_converter()
-    drone_takeoff()
-    drone_takeoff()
+    #drone_takeoff()
+    #drone_takeoff()
 
     try:
         rospy.spin()

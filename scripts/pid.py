@@ -39,7 +39,7 @@ class PID_class (object):
    def update (self, value, targetValue):
 
       # record current value and target value and find current time
-      rospy.loginfo("values are %f and %f", value, targetValue)
+      #rospy.loginfo("values are %f and %f", value, targetValue)
       time = float(rospy.Time.to_sec(rospy.Time.now()))
 
       # delta time is the time since the last update
@@ -53,7 +53,7 @@ class PID_class (object):
 
       # assure that integral is within the max and min otherwise use the central value (max or min)
       self.m_integral = max(min(self.m_integral, self.m_integratorMax), self.m_integratorMin)
-      rospy.loginfo("dt is %f, error is %f and m_integral is %f", dt, error, self.m_integral)
+      #rospy.loginfo("dt is %f, error is %f and m_integral is %f", dt, error, self.m_integral)
 
       # calculate proportional based on kp and current error
       p = self.m_kp * error
@@ -69,7 +69,7 @@ class PID_class (object):
 
       # sum the proportional, derivative and integral to obtain controller output value
       output = p + d + i
-      rospy.loginfo("P is %f, D is %f, I is %f", p, d, i) 
+      #rospy.loginfo("P is %f, D is %f, I is %f", p, d, i) 
 
       # save current error and time for the next cycle
       self.m_previousError = error
