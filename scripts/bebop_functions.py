@@ -33,7 +33,6 @@ def drone_takeoff():
 
 def drone_land():
 
-  drone_reset()
   landPub = rospy.Publisher('/bebop/land', Empty, queue_size=10)
   landCmd = Empty()
   landPub.publish(landCmd)
@@ -84,7 +83,7 @@ def altitude_callback(data, args):
 class badboi_message_class:
     def __init__(self):
         self.badboiMsgReceived = ""
-        self.bebopMsg = drive
+        self.bebopMsg = "drive"
         self.bebopPub = rospy.Publisher("robot_chat", String, queue_size=10)
 
     def badboi_callback(self, data):  
