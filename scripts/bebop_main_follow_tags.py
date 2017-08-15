@@ -478,6 +478,8 @@ def main(args):
     #go_to_altitude(2.0)
     sleep(5)
     badboiClassCall.bebop_send()
+    badboiClassCall.bebop_send()
+    badboiClassCall.bebop_send()
     ''' Assign the ic variable to the class type of image_converter'''
     #ic = image_converter()
 

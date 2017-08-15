@@ -9,26 +9,24 @@ class bebop_message_class:
 		self.badboiMsg = "takeoff"
 		self.badboiPub = rospy.Publisher("robot_chat", String, queue_size=10)
 
-	def badboi_callback(self, data):
+	def bebop_callback(self, data):
 		self.bebopMsgReceived = data.data
 
-	def badboi_caller(self):
-    	self.badboiSub = rospy.Subscriber("robot_chat", String, callback)
+	def bebop_caller(self):
+    	self.badboiSub = rospy.Subscriber("robot_chat", String, self.bebop_callback)
 
     def badboi_send(self):
-    	self.bebopPub.publish(self.badboiMsg)
+    	self.badboiPub.publish(self.badboiMsg)
 
 
 if __name__ == '__main__':
-	rospy.init_node('badboi_talker', anonymous=True)
+	rospy.init_node('badboi_node', anonymous=True)
 	rate = rospy.Rate(1)
-    try:
     bebopClassCall = bebop_message_class()
     while 1:
+    	bebopClassCall.bebop_caller() 
     	bebopClassCall.badboi_send()
-        bebopClassCall.bebop_caller() 
-        if bebopClassCall.bebopiMsgReceived == "drive":
+        if bebopClassCall.bebopMsgReceived == "drive":
             print("Message received: ", bebopClassCall.bebopMsgReceived)
         rate.sleep()
-    except rospy.ROSInterruptException:
-        pass
+
