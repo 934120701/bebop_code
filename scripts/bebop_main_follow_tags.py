@@ -461,22 +461,24 @@ count = 0
 headHome = False
 
 
+
 def main(args):
     ''' Initialise the node under the name image_converter'''
     rospy.init_node('image_converter', anonymous=True)
 
     ''' wait for the message from the BadBoi to takeoff '''
+    badboiClassCall = badboi_message_class()
     while 1:
-        badboiMsg = badboi_listener()
-        if badboiMsg == "takeoff":
+        badboiClassCall.badboi_caller() 
+        if badboiClassCall.badboiMsgReceived == "takeoff":
             print("Message received, breaking into takeoff")
             break
 
-    #drone_takeoff()
-    #go_to_altitude(2.0)
-    #sleep(5)
+    drone_takeoff()
+    go_to_altitude(2.0)
+    sleep(5)
     ''' Assign the ic variable to the class type of image_converter'''
-    #ic = image_converter()
+    ic = image_converter()
 
 
     try:

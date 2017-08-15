@@ -79,9 +79,23 @@ def altitude_callback(data, args):
     # return
     flightPub.publish(flightCmd)
 
-def badboi_callback(data):
-    badboiMsg = data.data
 
-def badboi_listener():
-    badboiMsg = rospy.Subscriber("badboi_chat", String, badboi_callback)
-    return badboiMsg
+
+class badboi_message_class:
+    def __init__(self):
+        self.badboiMsgReceived = ""
+        self.bebopMsg = drive
+        self.bebopPub = rospy.Publisher("robot_chat", String, queue_size=10)
+
+    def badboi_callback(self, data):  
+        self.badboiMsgReceived = data.data
+
+    def badboi_caller(self):
+        self.badboiSub = rospy.Subscriber("robot_chat", String, self.badboi_callback)
+
+    def bebop_send(self):
+        self.bebopPub.publish(self.bebopMsg)
+
+
+
+
