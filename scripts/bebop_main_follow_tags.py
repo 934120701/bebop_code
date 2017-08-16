@@ -296,6 +296,7 @@ class image_converter:
         lowestTagIndex = 0
         firstTagSeen = False
         badBoiTagId = 14
+        landTag = 0
 
         markerLength = 5
         count = count + 1
@@ -383,6 +384,10 @@ class image_converter:
             print("targetTagPosition: ",
                   self.targetTagPosition[0], self.targetTagPosition[1])
 
+            if(self.targetTagId == landTag and (abs(self.targetTagPosition[0] - 428) < 20) and (abs(self.targetTagPosition[1] - 320) < 20)):
+                drone_land()
+                
+
             ''' Send the positions of the tag we wish to fly to to the PID update function to get new velocities '''
             self.flightCmd.linear.y = self.m_pidX.update(
                 self.targetTagPosition[0], 428)
@@ -467,23 +472,29 @@ def main(args):
     rospy.init_node('image_converter', anonymous=True)
 
     ''' wait for the message from the BadBoi to takeoff '''
-    badboiClassCall = badboi_message_class()
+    '''badboiClassCall = badboi_message_class()
     while 1:
         badboiClassCall.badboi_caller() 
         if badboiClassCall.badboiMsgReceived == "takeoff":
             print("Message received, breaking into takeoff")
-            break
-
-    #drone_takeoff()
-    #go_to_altitude(2.0)
+            break'''
+    drone_takeoff()
+    print("calling class")
+    alt = altitude_class(2.0)
+    #rate = rospy.Rate(1)
+    #while alt.stopSubscribe != True:
+    print("calling go_to_altitude in while loop")
+    alt.go_to_altitude()
+    #rate.sleep()
+    print("called")
     sleep(5)
-    rate = rospy.Rate(1)
+    '''rate = rospy.Rate(1)
     while not rospy.is_shutdown():
         badboiClassCall.bebop_send()        
-    rate.sleep()
+    rate.sleep()'''
 
     ''' Assign the ic variable to the class type of image_converter'''
-    #ic = image_converter()
+    ic = image_converter()
 
 
     try:

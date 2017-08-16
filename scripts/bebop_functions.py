@@ -50,33 +50,78 @@ def drone_reset():
 
 # Takes a desired altitude in meters and invokes a callback that causes the drone to fly up or down
 
+class altitude_class:
 
-def go_to_altitude(desiredAltitude):
+    def __init__(self, desiredAltitude):
+        self.stopSubscribe = False
+        self.desiredAltitude = desiredAltitude
+        self.altitude = int
+        print("desired altitude set at: ", self.desiredAltitude)
 
-  altitudeSub = rospy.Subscriber("/bebop/states/ardrone3/PilotingState/AltitudeChanged",
-                                 Ardrone3PilotingStateAltitudeChanged, altitude_callback, (desiredAltitude))
+    def go_to_altitude(self):
+        flightPub = rospy.Publisher('/bebop/cmd_vel', Twist, queue_size=10)
+        flightCmd = Twist()
+        print("go to altitude called")
+        rate = rospy.Rate(5)
+
+        while self.stopSubscribe != True:
+
+            self.altitudeSub = rospy.Subscriber("/bebop/states/ardrone3/PilotingState/AltitudeChanged",
+                                 Ardrone3PilotingStateAltitudeChanged, self.altitude_callback)
+        
+
+            print("desired: ", self.desiredAltitude)
+            print("current: ", self.altitude)
+
+            if (self.altitude < self.desiredAltitude - 0.1):
+                flightCmd.linear.z = 0.2
+                flightPub.publish(flightCmd)
+
+            elif (self.altitude > self.desiredAltitude + 0.1):
+                flightCmd.linear.z = -0.2
+                flightPub.publish(flightCmd)
+
+            else:
+                flightCmd.linear.z = 0
+                flightPub.publish(flightCmd)
+                sleep(3)
+                self.stopSubscribe = True
+                self.altitudeSub.unregister()
+                print("stopSubscribe made true in else")
+            rate.sleep()
+
+        '''print("stop subscibe in go_to_altitude: ", self.stopSubscribe)
+        if (self.stopSubscribe != True):
+            self.altitudeSub.unregister()
+            print("Unsubscribed from altitude")
+            print("Leaving with altitude: ", self.altitude)'''
 
 # Callback for the above subscriber. Sends one command to the drone to fly up/down 0.1 max speed if the current altitude is not within 10 cm of the desired altitude
 
 
-def altitude_callback(data, args):
+    def altitude_callback(self, data):
 
-  altitude = data.altitude
-  desiredAltitude = args
-  flightPub = rospy.Publisher('/bebop/cmd_vel', Twist, queue_size=10)
-  flightCmd = Twist()
-  if (altitude < desiredAltitude - 0.1):
-    flightCmd.linear.z = 0.2
-    flightPub.publish(flightCmd)
+        self.altitude = data.altitude
+        '''   flightPub = rospy.Publisher('/bebop/cmd_vel', Twist, queue_size=10)
+        flightCmd = Twist()
+        print("desired: ", self.desiredAltitude)
+        print("current: ", self.altitude)
 
-  elif (altitude > desiredAltitude + 0.1):
-    flightCmd.linear.z = -0.2
-    flightPub.publish(flightCmd)
+        if (self.altitude < self.desiredAltitude - 0.1):
+            flightCmd.linear.z = 0.2
+            flightPub.publish(flightCmd)
 
-  else:
-    flightCmd.linear.z = 0
-    # return
-    flightPub.publish(flightCmd)
+        elif (self.altitude > self.desiredAltitude + 0.1):
+            flightCmd.linear.z = -0.2
+            flightPub.publish(flightCmd)
+
+        else:
+            flightCmd.linear.z = 0
+            flightPub.publish(flightCmd)
+            sleep(3)
+            self.stopSubscribe = True
+            self.altitudeSub.unregister()
+            print("stopSubscribe made true in else")'''
 
 
 
