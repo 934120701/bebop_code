@@ -74,7 +74,6 @@ class PID_class (object):
       # save current error and time for the next cycle
       self.m_previousError = error
       self.m_previousTime = time
-      print("output: ", output)
 
       # assure that output value is within the max and min otherwise use the central value (max or min)
       return max(min(output, self.m_maxOutput), self.m_minOutput)

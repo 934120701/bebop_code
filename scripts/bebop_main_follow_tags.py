@@ -37,6 +37,9 @@ class image_converter:
         self.lowestTagId = int
         self.highestTagIndex = int
         self.lowestTagId = int
+        self.firstTagSeen = False
+        self.atStartTag = False
+        self.goToTag = 1
         self.m_pidX = PID_class(0.001,
                                 0.001,
                                 0.008,
@@ -264,8 +267,6 @@ class image_converter:
     def target_tag(self, headHome):
         targetPosition = []
 
-        
-
         if (headHome == False):
             targetId = None
             for x in range(0, len(self.highestTagIdListWithPositions)):
@@ -301,12 +302,23 @@ class image_converter:
                     self.lowestTagIdListWithPositions.popleft()
             self.lowestTagIdListWithPositions.append([self.lowestTagId, self.lowestTagCenterPixel])
 
+
     def bebop_hover(self):
         self.flightCmd.angular.z = 0
         self.flightCmd.linear.x = 0
         self.flightCmd.linear.y = 0
         self.flightCmd.linear.z = 0
         self.flight_pub.publish(self.flightCmd)
+
+    def get_tag_position_from_id(self, requestedId):
+        position = [428, 320]
+        found = False
+        for x in range(0, len(self.ids)):
+            if self.ids[x] == requestedId:
+                position = self.tag_center(self.corners[x][0])
+                found = True
+        return position, found
+
     
     def callback(self, data):
 
@@ -316,14 +328,14 @@ class image_converter:
             print(e)
 
         global camera_angle, count, headHome
-        firstTagSeen = False
+        #firstTagSeen = False
         tvec = np.empty([])
         rvec = np.empty([])
         highestTagIndex = 0
         highestTagId = 0
         lowestTagId = 100
         lowestTagIndex = 0
-        badBoiTagId = 14
+        badBoiTagId = 18
         landTag = 0
         cameraAngleBirdsEye = -70
         markerLength = 5
@@ -349,12 +361,82 @@ class image_converter:
         it by publishing back a new angle to the control_camera topic.'''
         if (len(self.corners) != 0):
             count = 0
-            firstTagSeen = True
+            #self.firstTagSeen = True
             ''' Draw on the markers so we can see they've been detected'''
             gray = aruco.drawDetectedMarkers(cv_image, self.corners, self.ids)
             ''' Calls the function to add the highest and lowest tags to their lists '''
             self.update_tag_lists()
-            if (headHome == False):
+
+            if (self.firstTagSeen == False):
+                if (self.goToTag == 1):
+                    self.targetTagPosition, found = self.get_tag_position_from_id(1)
+                    print("targetTagPosition: ", self.targetTagPosition, "found: ", found)
+                    if (found == True):
+                        if ((abs(self.targetTagPosition[0] - 428) > 15) or (abs(self.targetTagPosition[1] - 320) > 15)):
+                            self.flightCmd.linear.y = self.m_pidX.update(self.targetTagPosition[0], 428)
+                            self.flightCmd.linear.x = self.m_pidY.update(self.targetTagPosition[1], 320)
+                            self.flight_pub.publish(self.flightCmd)
+                            print("highestTagId: ", self.highestTagId[0])
+                        else:   
+                            if (self.highestTagId[0] <= 2):
+                                print("Entered else in 1")
+                                self.goToTag = 0
+                                found = False
+                                self.flightCmd.linear.y = 0
+                                self.flightCmd.linear.x = 0
+                                self.flightCmd.angular.z = 0.2
+                                self.flight_pub.publish(self.flightCmd)
+                            else:
+                                self.firstTagSeen = True
+                                print("First tag seen")
+                                self.flightCmd.angular.z = 0
+                                self.flight_pub.publish(self.flightCmd)
+
+                elif (self.goToTag == 0):
+                    self.targetTagPosition, found = self.get_tag_position_from_id(0)
+                    self.flight_pub.publish(self.flightCmd)
+                    
+                    if (found == True):
+                        if ((abs(self.targetTagPosition[0] - 428) > 10) or (abs(self.targetTagPosition[1] - 320) > 10)):
+                            self.flightCmd.angular.z = 0
+                            self.flightCmd.linear.y = self.m_pidX.update(self.targetTagPosition[0], 428)
+                            self.flightCmd.linear.x = self.m_pidY.update(self.targetTagPosition[1], 320)
+                            self.flight_pub.publish(self.flightCmd)
+                        else:
+                            self.goToTag = 2
+                            found = False      
+                            self.targetTagPosition, found = self.get_tag_position_from_id(2)
+                            if (found == False):
+                                self.flightCmd.angular.z = -0.2
+                                self.flight_pub.publish(self.flightCmd)
+
+
+                elif (self.goToTag == 2):
+                    self.targetTagPosition, found = self.get_tag_position_from_id(2)
+                    self.flight_pub.publish(self.flightCmd)
+                    if (found == True):
+                        if ((abs(self.targetTagPosition[0] - 428) > 10) or (abs(self.targetTagPosition[1] - 320) > 10)):
+                            self.flightCmd.angular.z = 0
+                            print("zeroed in 2 first if")
+                            self.flightCmd.linear.y = self.m_pidX.update(self.targetTagPosition[0], 428)
+                            self.flightCmd.linear.x = self.m_pidY.update(self.targetTagPosition[1], 320)
+                            self.flight_pub.publish(self.flightCmd)
+                        if (self.highestTagId[0] <= 2):
+                            found = False
+                            self.flightCmd.linear.y = 0
+                            self.flightCmd.linear.x = 0
+                            self.flightCmd.angular.z = 0.1
+                            self.flight_pub.publish(self.flightCmd) 
+                        else:
+                            self.firstTagSeen = True
+                            print("First tag seen")
+                            self.flightCmd.angular.z = 0
+                            print("zeroed in 2 else")
+                            self.flight_pub.publish(self.flightCmd)
+
+
+            if (headHome == False and self.firstTagSeen == True):
+                print("TAG SEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEN")
                 self.targetTagId, self.targetTagPosition = self.target_tag(headHome)
                 ''' Check to see if the BadBoi tag is within 20 pixels square of the desired pixel position, if it is we have arrived and it's time
                 to head back '''
@@ -364,19 +446,18 @@ class image_converter:
                     self.bebop_hover()
                     sleep(5)
 
-            elif (headHome == True):
+            elif (headHome == True and self.firstTagSeen == True):
                 self.targetTagId, self.targetTagPosition = self.target_tag(headHome)
-
-            if(self.targetTagId == landTag and (abs(self.targetTagPosition[0] - 428) < 20) and (abs(self.targetTagPosition[1] - 320) < 20)):
-                drone_land()
+                if(self.targetTagId == landTag and (abs(self.targetTagPosition[0] - 428) < 20) and (abs(self.targetTagPosition[1] - 320) < 20)):
+                    drone_land()
                  
 
-            print(" ")
-            print("targetTagId: ", self.targetTagId, "targetTagPosition", self.targetTagPosition)
+            #print(" ")
+            #print("targetTagId: ", self.targetTagId, "targetTagPosition", self.targetTagPosition)
 
 
         ''' if to check if we've seen a tag in the last 30 frames '''
-        if(count <= 30 and firstTagSeen == True):
+        if(count <= 30 and self.firstTagSeen == True):
             cv2.circle(cv_image, (int(self.targetTagPosition[0]), int(self.targetTagPosition[1])), 10, (0, 0, 255), -1)
             ''' Send the current value and the target value for the Y position of the tag to the PID function'''
             print("targetTagPosition: ", self.targetTagPosition[0], self.targetTagPosition[1])
@@ -392,18 +473,20 @@ class image_converter:
 
             else:
                 self.flightCmd.angular.z = 0
+                print("zeroed in count<= 30 first tage seen==true")
                 self.flightCmd.linear.z = 0
         
             self.flight_pub.publish(self.flightCmd)
 
-        elif (count > 30 and count <= 200):
+        elif (count > 30 and count <= 200 and self.firstTagSeen == True):
             self.flightCmd.angular.z = 0
+            print("zeroed in count>30 count<=200")
             self.flightCmd.linear.x = 0
             self.flightCmd.linear.y = 0
             self.flightCmd.linear.z = 0
             self.flight_pub.publish(self.flightCmd)
 
-        elif (count > 200):
+        elif (count > 200 and self.firstTagSeen == True):
             self.flightCmd.angular.z = 0.1
             self.flightCmd.linear.x = 0
             self.flightCmd.linear.y = 0
@@ -426,6 +509,8 @@ class image_converter:
 
         except CvBridgeError as e:
             print(e)
+
+
 
 
 # Setup an initial camera angle
