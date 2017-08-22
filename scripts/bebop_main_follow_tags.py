@@ -534,7 +534,7 @@ def main(args):
             break'''
 
     drone_takeoff()
-    alt = altitude_class(2.0)
+    alt = altitude_class(1.7)
     print("Aquiring altitude")
     alt.go_to_altitude()
     print("Altitude aquired")
