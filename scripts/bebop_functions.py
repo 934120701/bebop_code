@@ -37,6 +37,8 @@ def drone_land():
   landCmd = Empty()
   landPub.publish(landCmd)
   sleep(3)
+  landPub.publish(landCmd)
+  sleep(3)
 
 # Resets the drone, this is handy so multiple land/takeoff commands are not necessary
 
