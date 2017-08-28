@@ -134,6 +134,33 @@ class badboi_message_class:
     def bebop_send(self):
         self.bebopPub.publish(self.bebopMsg)
 
+def setup_client():
+    host = '192.168.1.180'
+    port = 10002
+    client = socket.socket(socket.AF_INET,socket.SOCK_STREAM)
+    client.connect((host, port))
+    return client
+
+def heard_from_badboi(client): 
+    while True:
+        data_from_badboi = client.recv(1024)
+        data_from_badboi = data_from_badboi.decode('utf-8')
+        if data_from_badboi == "takeoff":
+            print("client received message:", data_from_badboi)
+            client.sendall(str.encode("received"))
+            print("client sent message received")
+            break
+
+def send_msg_to_badboi(client):
+    while True:
+        client.sendall(str.encode("gohome"))
+        print("client sent message go home")
+        data_from_badboi = client.recv(1024)
+        data_from_badboi = data_from_badboi.decode('utf-8')
+        if data_from_badboi == 'received':
+            print("client received message received")
+            break
+    client.close()
 
 
 
