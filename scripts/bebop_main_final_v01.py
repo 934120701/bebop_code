@@ -10,7 +10,7 @@ from bebop_functions import *
 using them to feed velocity commands back to the drone """
 class image_converter:
 
-    def __init__(self):
+    def __init__(self, s):
         ''' Create the publishers and subscribers '''
         self.image_pub = rospy.Publisher("image_topic_2", Image, queue_size=10)
         self.message_pub = rospy.Publisher(
@@ -46,6 +46,7 @@ class image_converter:
         self.tagZeroVisitTimes = 0
         self.videoTargetPixelX = 428
         self.videoTargetPixelY = 400 #320 previously
+        self.s = s
         self.m_pidX = PID_class(0.001,
                                 0.001,
                                 0.008, #0.008
@@ -60,6 +61,15 @@ class image_converter:
                                 0.1,
                                 -0.1,
                                 0.1)
+
+        #Consider putting the altitude class call in here so we can call it when we're
+        #at the BadBoi to get the correct height again
+        '''drone_takeoff()
+        self.alt = altitude_class(1.7)
+        print("Aquiring altitude")
+        self.alt.go_to_altitude()
+        print("Altitude aquired")
+        sleep(2)'''
 
     ''' tag_center takes the values for the pixels of the corners of an identified ArUco tag and calculates the
     position of the center pixel based on these, returning the two element list with x and y positions'''
@@ -214,7 +224,6 @@ class image_converter:
         tvec = np.empty([])
         rvec = np.empty([])
         highestTagIndex = 0
-        #highestTagId = 0
         lowestTagId = 100
         lowestTagIndex = 0
         badBoiTagId = 18
@@ -376,16 +385,19 @@ class image_converter:
                 self.targetTagId, self.targetTagPosition = self.target_tag(headHome)
                 ''' Check to see if the BadBoi tag is within 20 pixels square of the desired pixel position, if it is we have arrived and it's time
                 to head back '''
+                # ARRIVE AT BADBOI CHECK
                 if((self.targetTagId == badBoiTagId) and (abs(self.targetTagPosition[0] - self.videoTargetPixelX) < 20) and (abs(self.targetTagPosition[1] - self.videoTargetPixelY) < 20)):
                     print("Reached BadBoi")
                     headHome = True
                     self.bebop_hover()
+                    self.alt.go_to_altitude()
                     sleep(5)
 
-            # If we're on the way home, and we're over the landing tag we can land
+            # LANDING
             elif (headHome == True and self.firstTagSeen == True):
                 self.targetTagId, self.targetTagPosition = self.target_tag(headHome)
                 if(self.targetTagId == landTag and (abs(self.targetTagPosition[0] - self.videoTargetPixelX) < 20) and (abs(self.targetTagPosition[1] - self.videoTargetPixelY) < 20)):
+                    send_msg_to_badboi(self.s)
                     drone_land()
                  
 
@@ -442,14 +454,9 @@ def main(args):
     ''' Initialise the node under the name image_converter'''
     rospy.init_node('image_converter', anonymous=True)
 
-    ''' wait for the message from the BadBoi to takeoff '''
-    '''badboiClassCall = badboi_message_class()
+    s = setup_client()
+    heard_from_badboi(s)
 
-    while 1:
-        badboiClassCall.badboi_caller() 
-        if badboiClassCall.badboiMsgReceived == "takeoff":
-            print("Message received, now taking off")
-            break'''
 
     drone_takeoff()
     alt = altitude_class(1.7)
@@ -458,7 +465,7 @@ def main(args):
     print("Altitude aquired")
     sleep(2)
 
-    ic = image_converter()
+    ic = image_converter(s)
     rate = rospy.Rate(1)
     while not rospy.is_shutdown() and headHome == True:
         badboiClassCall.bebop_send()        

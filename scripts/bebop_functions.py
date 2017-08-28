@@ -63,6 +63,7 @@ class altitude_class:
         flightPub = rospy.Publisher('/bebop/cmd_vel', Twist, queue_size=10)
         flightCmd = Twist()
         rate = rospy.Rate(5)
+        self.stopSubscribe = False
 
         while self.stopSubscribe != True:
 
@@ -138,7 +139,7 @@ class badboi_message_class:
 
 def setup_client():
     host = '192.168.1.180'
-    port = 10002
+    port = 10006
     client = socket.socket(socket.AF_INET,socket.SOCK_STREAM)
     client.connect((host, port))
     return client
