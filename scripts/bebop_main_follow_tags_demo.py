@@ -69,7 +69,7 @@ class image_converter:
   calculates whether we need to pan up or down to move the ArUco tag to the center of the screen
   returns the new angle we need to publish to the topic'''
 
-    def camera_angle_correction(self, arucoCodeCenterPixelPosition, currentAngleY):
+    '''def camera_angle_correction(self, arucoCodeCenterPixelPosition, currentAngleY):
 
         positionErrorX = 428 - arucoCodeCenterPixelPosition[0]
         positionErrorY = 240 - arucoCodeCenterPixelPosition[1]
@@ -91,7 +91,7 @@ class image_converter:
         else:
             newAngleY = currentAngleY
 
-        return newAngleY
+        return newAngleY'''
 
     ''' publish_camera takes the camera_angle we want to publish and publishes it to the camera_control topic'''
 
@@ -111,7 +111,7 @@ class image_converter:
 
     ''' Flys the Bebop towards an identified tag to place the tag at the bottom of the video feed'''
 
-    def flight_commands_current_tag(self, arucoCodeCenterPixelPosition):
+    '''def flight_commands_current_tag(self, arucoCodeCenterPixelPosition):
 
         # print("current")
         # rospy.loginfo("current")
@@ -139,26 +139,21 @@ class image_converter:
 
             # print("hover")
 
-        self.flight_pub.publish(self.flightCmd)
+        self.flight_pub.publish(self.flightCmd)'''
 
     ''' Flight_commands_previous_tags takes in the direction vector and calculates values for the x and y velocity
-  of the drone in order to navigate it back in the direction the last ArUco tag was lost'''
+    of the drone in order to navigate it back in the direction the last ArUco tag was lost'''
 
-    def flight_commands_previous_tags(self, directionVector):
+    """def flight_commands_previous_tags(self, directionVector):
 
-        #print("past")
         rospy.loginfo("past")
-        #print(directionVector[0], directionVector[1])
 
         ''' Calculate the rate of the x and y components in the video feed to each other'''
         ratioX = abs(directionVector[
                       0]) * (0.05 / (abs(directionVector[0]) + abs(directionVector[1])))
         ratioY = abs(directionVector[
                       1]) * (0.05 / (abs(directionVector[0]) + abs(directionVector[1])))
-        rospy.loginfo("directionVector: %d  %d",
-                      directionVector[0], directionVector[1])
-        #print("x: %f ", ratioX)
-        #print("y: %f ", ratioY)
+        rospy.loginfo("directionVector: %d  %d", directionVector[0], directionVector[1])
         rospy.loginfo("ratioX: %f   ratioY: %f", ratioX, ratioY)
 
         ''' Set the larger ratio to a maximum of 0.05 velocity and scale the other lower'''
@@ -172,15 +167,13 @@ class image_converter:
             ratioY = ratioY * multiplier
             ratioX = ratioX * multiplier
 
-        #print("x: %f ", ratioX)
-        #print("y: %f ", ratioY)
         rospy.loginfo(
             "ratioX multiplied: %f   ratioY multiplied: %f ", ratioX, ratioY)
 
         ''' If the direction vector for the x coordinate in the feed is less than 0, the ArUco tag will have disappeared to
-    the left, therefore we need to fly the drone left (positive y in the drone's coordinates) to rediscover the tag.
-    If it's positive, the tag disappeared to the right, so we should fly the drone to the right (negative y in the
-    drone's coordinate system).'''
+        the left, therefore we need to fly the drone left (positive y in the drone's coordinates) to rediscover the tag.
+        If it's positive, the tag disappeared to the right, so we should fly the drone to the right (negative y in the
+        drone's coordinate system).'''
         if direction_vector[0] < 0:
             self.flightCmd.linear.x = + ratioYratioY
         else:
@@ -197,22 +190,22 @@ class image_converter:
         self.flightCmd.angular.z = 0
         self.flightCmd.linear.z = 0
 
-        self.flight_pub.publish(self.flightCmd)
+        self.flight_pub.publish(self.flightCmd)"""
 
     ''' Adds a new tag position to the list the holds the last 3 detected positions and returns the list'''
 
-    def update_previous_aruco_code_center_pixels_list(self, arucoCodeCenterPixelPosition):
+    """def update_previous_aruco_code_center_pixels_list(self, arucoCodeCenterPixelPosition):
         ''' If the 3 element list is full, pop the value at element 0 before appending the next position'''
         if type(self.previousArucoCodeCenterPixels[2]) != None:
             self.previousArucoCodeCenterPixels.popleft()
         self.previousArucoCodeCenterPixels.append(arucoCodeCenterPixelPosition)
 
-        return self.previousArucoCodeCenterPixels
+        return self.previousArucoCodeCenterPixels"""
 
     ''' Calculate the vector for the change in ArUco tag position from either the 0 and 3rd element or 0 and 1st element
   if the list contains only 2 positions. Returns the positionChangeVector (direction_change vector).'''
 
-    def aruco_tag_position_change(self, previousArucoCodeCenterPixels):
+    """def aruco_tag_position_change(self, previousArucoCodeCenterPixels):
 
         positionChangeVector = []
 
@@ -229,15 +222,15 @@ class image_converter:
             ''' If for some reason we don't have 2 previous tag positions to calculate with, set the vector to None.'''
         else:
             positionChangeVector = None
-        return positionChangeVector
+        return positionChangeVector"""
 
     ''' Conversion from x and y cartesian coordinates to distance and angle in polar'''
 
-    def cart2pol(self, cartesian):
+    """def cart2pol(self, cartesian):
 
         rho = np.sqrt((cartesian[0] ** 2) + (cartesian[1] ** 2))
         phi = np.arctan2(cartesian[1], cartesian[0])
-        return(rho, phi)
+        return(rho, phi)"""
 
     ''' Function to return the highest tag id'''
 
@@ -320,6 +313,7 @@ class image_converter:
         return position, found
 
     
+   
     def callback(self, data):
 
         try:
@@ -376,7 +370,6 @@ class image_converter:
                             self.flightCmd.linear.y = self.m_pidX.update(self.targetTagPosition[0], 428)
                             self.flightCmd.linear.x = self.m_pidY.update(self.targetTagPosition[1], 320)
                             self.flight_pub.publish(self.flightCmd)
-                            print("highestTagId: ", self.highestTagId[0])
                         else:   
                             if (self.highestTagId[0] <= 2):
                                 print("Entered else in 1")
@@ -534,11 +527,11 @@ def main(args):
             break'''
 
     drone_takeoff()
-    alt = altitude_class(2.0)
+    alt = altitude_class(1.7)
     print("Aquiring altitude")
     alt.go_to_altitude()
     print("Altitude aquired")
-    sleep(5)
+    sleep(2)
 
     ic = image_converter()
     rate = rospy.Rate(1)

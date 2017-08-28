@@ -56,28 +56,23 @@ class altitude_class:
         self.stopSubscribe = False
         self.desiredAltitude = desiredAltitude
         self.altitude = int
-        print("desired altitude set at: ", self.desiredAltitude)
 
     def go_to_altitude(self):
         flightPub = rospy.Publisher('/bebop/cmd_vel', Twist, queue_size=10)
         flightCmd = Twist()
-        print("go to altitude called")
         rate = rospy.Rate(5)
 
         while self.stopSubscribe != True:
 
             self.altitudeSub = rospy.Subscriber("/bebop/states/ardrone3/PilotingState/AltitudeChanged",
                                  Ardrone3PilotingStateAltitudeChanged, self.altitude_callback)
-        
+      
 
-            print("desired: ", self.desiredAltitude)
-            print("current: ", self.altitude)
-
-            if (self.altitude < self.desiredAltitude - 0.1):
+            if (self.altitude < self.desiredAltitude - 0.07):
                 flightCmd.linear.z = 0.2
                 flightPub.publish(flightCmd)
 
-            elif (self.altitude > self.desiredAltitude + 0.1):
+            elif (self.altitude > self.desiredAltitude + 0.07):
                 flightCmd.linear.z = -0.2
                 flightPub.publish(flightCmd)
 
@@ -87,7 +82,6 @@ class altitude_class:
                 sleep(3)
                 self.stopSubscribe = True
                 self.altitudeSub.unregister()
-                print("stopSubscribe made true in else")
             rate.sleep()
 
         '''print("stop subscibe in go_to_altitude: ", self.stopSubscribe)
