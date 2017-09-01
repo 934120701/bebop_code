@@ -139,7 +139,7 @@ class badboi_message_class:
 
 def setup_client():
     host = '192.168.1.180'
-    port = 10007
+    port = 10018
     client = socket.socket(socket.AF_INET,socket.SOCK_STREAM)
     client.connect((host, port))
     return client

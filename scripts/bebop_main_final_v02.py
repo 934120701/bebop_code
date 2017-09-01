@@ -34,8 +34,6 @@ class image_converter:
         self.targetTagPosition = []
         self.targetTagId = 0
         self.ids = int
-        #self.highestTagId = None
-        #self.lowestTagId = None
         self.highestTagIndex = int
         self.lowestTagId = int
         self.firstTagSeen = False
@@ -45,22 +43,10 @@ class image_converter:
         self.goToTag = 0
         self.tagZeroVisitTimes = 0
         self.videoTargetPixelX = 428#428
-        self.videoTargetPixelY = 380 #400 #320 previously
+        self.videoTargetPixelY = 400 #400 #320 previously
         self.s = s
-        '''self.m_pidX = PID_class(0.001, #P
-                                0.0008, #D
-                                0.006, #I 0.008
-                                -0.05, #Min Output
-                                0.05,  #Max Output
-                                -0.07, #Integrator Min
-                                0.07)  #Integrator Max
-        self.m_pidY = PID_class(0.001,
-                                0.001,
-                                0.006, #0.008
-                                -0.08,
-                                0.08,
-                                -0.07,
-                                0.07)'''
+        self.count = 0
+        self.count2 = 0
         self.m_pidX = PID_class(0.001,
                                 0.001,
                                 0.008,
@@ -76,18 +62,8 @@ class image_converter:
                                 -0.1,
                                 0.1)
 
-        #Consider putting the altitude class call in here so we can call it when we're
-        #at the BadBoi to get the correct height again
-        '''drone_takeoff()
-        self.alt = altitude_class(1.7)
-        print("Aquiring altitude")
-        self.alt.go_to_altitude()
-        print("Altitude aquired")
-        sleep(2)'''
-
     ''' tag_center takes the values for the pixels of the corners of an identified ArUco tag and calculates the
     position of the center pixel based on these, returning the two element list with x and y positions'''
-
     def tag_center(self, corners):
 
         arucoCodeCenterX = (corners[0][0] + corners[2][0]) / 2
@@ -177,7 +153,6 @@ class image_converter:
         for x in range(0, 10):
             if (self.highestTagIdListWithPositions[20+x][0][0] > currentHighest):
                 currentHighest = self.highestTagIdListWithPositions[20+x][0][0]
-                print("currentHighest = ", currentHighest)
         if currentHighest > 2:
             gotABadBoiTag = True
         return gotABadBoiTag
@@ -212,7 +187,7 @@ class image_converter:
     def stop_and_rotate(self):
         self.flightCmd.linear.y = 0
         self.flightCmd.linear.x = 0
-        self.flightCmd.angular.z = 0.2
+        self.flightCmd.angular.z = 0.3
         self.flight_pub.publish(self.flightCmd)
 
     ''' Draws the overlay on the image with the crosshairs '''
@@ -233,7 +208,7 @@ class image_converter:
             print(e)
 
         # Set some method specific variables
-        global camera_angle, count, headHome, count2
+        global camera_angle,headHome#, count2, count
         tvec = np.empty([])
         rvec = np.empty([])
         highestTagIndex = 0
@@ -243,7 +218,7 @@ class image_converter:
         landTag = 0
         cameraAngleBirdsEye = -70
         markerLength = 5
-        count = count + 1
+        self.count = self.count + 1
         
 
         ''' Load in the camera cooefficients from the calibration.yaml file in config folder '''
@@ -261,9 +236,9 @@ class image_converter:
         self.publish_camera(cameraAngleBirdsEye)
 
         if (self.firstTagSeen == False):
-            count2 = count2 + 1
+            self.count2 = self.count2 + 1
         else: 
-            count2 = 0
+            self.count2 = 0
         if (self.keepRotating == True):
             self.stop_and_rotate()
 
@@ -271,8 +246,8 @@ class image_converter:
          of the corners list to see if it's greater than 0. If it is, then we want to
         find the center position of the tag and then correct the camera angle to center
         it by publishing back a new angle to the control_camera topic. '''
-        if (len(self.corners) != 0 or count2 > 800):
-            count = 0
+        if (len(self.corners) != 0 or self.count2 > 800):
+            self.count = 0
 
             ''' Draw on the markers so we can see they've been detected'''
             gray = aruco.drawDetectedMarkers(cv_image, self.corners, self.ids)
@@ -292,39 +267,31 @@ class image_converter:
                         if (self.atStartTag == False):
                             # If we're not over it, get us within 20x20 pixels of the tag center
                             if ((abs(self.targetTagPosition[0] - self.videoTargetPixelX) > 20) or (abs(self.targetTagPosition[1] - self.videoTargetPixelY) > 20)):
-                                print("flying to 1")
-                                print("Y error flight: ", abs(self.targetTagPosition[0] - self.videoTargetPixelX), "   X error flight: ",
-                                    abs(self.targetTagPosition[1] - self.videoTargetPixelY))
                                 self.update_and_publish_pid_flight()
                                 cv2.circle(cv_image, (int(self.targetTagPosition[0]), int(self.targetTagPosition[1])), 10, (0, 0, 255), -1)
-                                count2 = 0
+                                self.count2 = 0
                             # If we're wihin 20x20 pixels, set the self.atStartTag variable to true so we know there's no need to navigate to it
                             else:
                                 self.atStartTag = True
-                                print("atStartTag = True")
                         # If we're within 20x20 pixels, start to rotate
                         else:   
-                            print("We have arrived at tag 1")
                             self.stop_and_rotate()
                             self.keepRotating = True
                             # Check to see if we've seen a BadBoi tag within the last 11 frames
                             if (self.check_frames_for_badboi_tag() == False):
                                 
                                 # If we haven't and we have rotate over a period of 200 frames, head back to tag 0
-                                if (count2 > 600):
+                                if (self.count2 > 600):
                                     self.goToTag = 0
-                                    print("goToTag set zero inside 1")
                                     found = False
                                     self.keepRotating = False
                                     self.atStartTag = False
-                                    count2 = 0
-                                    print("count2 reset")
+                                    self.count2 = 0
                                 
                             # If we have seen a BadBoi tag, set self.firstTagSeen to true and we can begin tracking tags
                             else:
                                 self.firstTagSeen = True
                                 self.bebop_hover()
-                                print("Tag Seen Now Hovering")
                     # If we can't see the tag we want to fly to, rotate
                     elif (found == False):
                         self.stop_and_rotate()
@@ -336,7 +303,6 @@ class image_converter:
                     self.flight_pub.publish(self.flightCmd)
                     
                     if (found == True):
-                        print("highestTagId goToTag == 0", self.highestTagId[0])
                         if ((abs(self.targetTagPosition[0] - self.videoTargetPixelX) > 20) or (abs(self.targetTagPosition[1] - self.videoTargetPixelY) > 20)):
                             self.flightCmd.angular.z = 0
                             self.update_and_publish_pid_flight()
@@ -349,13 +315,12 @@ class image_converter:
                                 self.goToTag = 2
                             else:
                                 self.goToTag = 1
-                            print("goToTag set after mod: ", self.goToTag)
 
                             found = False  
                             self.foundPreviously = False    
                             self.targetTagPosition, found = self.get_tag_position_from_id(2)
                             if (found == False):
-                                self.flightCmd.angular.z = -0.2
+                                self.flightCmd.angular.z = -0.3
                                 self.flight_pub.publish(self.flightCmd)
                     elif (found == False):
                         self.stop_and_rotate()
@@ -369,49 +334,41 @@ class image_converter:
                     self.flight_pub.publish(self.flightCmd)
                     if (found == True):
                         if(self.atStartTag == False):
-                            print("highestTagId goToTag == 2", self.highestTagId[0])
                             if ((abs(self.targetTagPosition[0] - self.videoTargetPixelX) > 20) or (abs(self.targetTagPosition[1] - self.videoTargetPixelY) > 20)):
                                 self.flightCmd.angular.z = 0
                                 self.update_and_publish_pid_flight()
                                 cv2.circle(cv_image, (int(self.targetTagPosition[0]), int(self.targetTagPosition[1])), 10, (0, 0, 255), -1)
-                                count2 = 0
+                                self.count2 = 0
                             else:
                                 self.atStartTag = True
                                 self.stop_and_rotate()
                         
                         else:
                             if (self.check_frames_for_badboi_tag() == False):
-                                print("count2 = ", count2)
-                                if (count2 > 600):
-                                    count2 = 0
-                                    print("count2 reset")
+                                if (self.count2 > 600):
+                                    self.count2 = 0
                                     found = False
                                     self.keepRotating = False
                                     self.atStartTag = False
                                     self.goToTag = 0
-                                    print("goToTag set 0 inside 2")
                                     self.stop_and_rotate() 
                             else:
                                 self.firstTagSeen = True
                                 self.bebop_hover()
-                                print("Tag Seen Now Hovering")
                     elif (found == False):
                         self.stop_and_rotate()
 
 
             # If we've seen the first tag and we're heading to the BadBoi, check if we're over it already 
             if (headHome == False and self.firstTagSeen == True):
-                print("TAG SEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEN")
                 self.targetTagId, self.targetTagPosition = self.target_tag(headHome)
                 ''' Check to see if the BadBoi tag is within 20 pixels square of the desired pixel position, if it is we have arrived and it's time
                 to head back '''
                 # ARRIVE AT BADBOI CHECK
                 if((self.targetTagId == badBoiTagId) and (abs(self.targetTagPosition[0] - self.videoTargetPixelX) < 20) and (abs(self.targetTagPosition[1] - self.videoTargetPixelY) < 20)):
-                    print("Reached BadBoi")
                     headHome = True
                     self.bebop_hover()
-                    #self.alt.go_to_altitude()
-                    sleep(5)
+                    sleep(3)
 
             # LANDING
             elif (headHome == True and self.firstTagSeen == True):
@@ -422,10 +379,9 @@ class image_converter:
                  
 
         ''' if to check if we've seen a tag in the last 30 frames '''
-        if(count <= 30 and self.firstTagSeen == True):
+        if(self.count <= 30 and self.firstTagSeen == True):
             cv2.circle(cv_image, (int(self.targetTagPosition[0]), int(self.targetTagPosition[1])), 10, (0, 0, 255), -1)
             ''' Send the current value and the target value for the Y position of the tag to the PID function'''
-            print("targetTagPosition: ", self.targetTagPosition[0], self.targetTagPosition[1])
             '''if (headHome == True and self.targetTagId <= 2):
                 altitudeCheck = altitude_class(1.6)
                 altitudeCheck.go_to_altitude()'''
@@ -437,7 +393,7 @@ class image_converter:
             
             ''' if the target tag is within these boundaries then we've arrived here and we cannot see the next tag so we should rotate '''
             if(abs(self.targetTagPosition[0] - self.videoTargetPixelX) < 25 and abs(self.targetTagPosition[1] - self.videoTargetPixelY) < 25):
-                self.flightCmd.angular.z = 0.1
+                self.flightCmd.angular.z = 0.3
             # If not, stop rotating and stop gaining any height
             else:
                 self.flightCmd.angular.z = 0
@@ -446,11 +402,11 @@ class image_converter:
             self.flight_pub.publish(self.flightCmd)
 
         # If we haven't seen a tag in a while, just hover a second (could be we temporarily lose it with light reflections)
-        elif (count > 30 and count <= 200 and self.firstTagSeen == True):
+        elif (self.count > 30 and self.count <= 200 and self.firstTagSeen == True):
             self.bebop_hover()
 
         # If we haven't seen a tag in a long while, rotate to see if we can see one
-        elif (count > 200): # and self.firstTagSeen == True):
+        elif (self.count > 200): # and self.firstTagSeen == True):
             self.stop_and_rotate()
 
 
@@ -468,9 +424,6 @@ class image_converter:
         except CvBridgeError as e:
             print(e)
 
-
-count = 0
-count2 = 0
 headHome = False
 
 def main(args):
