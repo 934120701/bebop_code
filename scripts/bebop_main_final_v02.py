@@ -11,16 +11,7 @@ using them to feed velocity commands back to the drone """
 class image_converter:
 
     def __init__(self,s):
-        ''' Create the publishers and subscribers '''
-        self.image_pub = rospy.Publisher("image_topic_2", Image, queue_size=10)
-        self.message_pub = rospy.Publisher(
-            "/bebop/camera_control", Twist, queue_size=10)
-        self.flight_pub = rospy.Publisher(
-            '/bebop/cmd_vel', Twist, queue_size=10)
-        self.camera_pub = rospy.Publisher(
-            '/bebop/camera_control', Twist, queue_size=10)
-        self.image_sub = rospy.Subscriber(
-            "/bebop/image_raw", Image, self.callback)
+
 
         ''' Create the variables used across the functions in the class image_converter'''
         self.bridge = CvBridge()
@@ -61,6 +52,21 @@ class image_converter:
                                 0.1,
                                 -0.1,
                                 0.1)
+
+        drone_takeoff()
+        self.alt = altitude_class(1.6)
+        sleep(5)
+
+        ''' Create the publishers and subscribers '''
+        self.image_pub = rospy.Publisher("image_topic_2", Image, queue_size=10)
+        self.message_pub = rospy.Publisher(
+            "/bebop/camera_control", Twist, queue_size=10)
+        self.flight_pub = rospy.Publisher(
+            '/bebop/cmd_vel', Twist, queue_size=10)
+        self.camera_pub = rospy.Publisher(
+            '/bebop/camera_control', Twist, queue_size=10)
+        self.image_sub = rospy.Subscriber(
+            "/bebop/image_raw", Image, self.callback)
 
     ''' tag_center takes the values for the pixels of the corners of an identified ArUco tag and calculates the
     position of the center pixel based on these, returning the two element list with x and y positions'''
@@ -214,7 +220,7 @@ class image_converter:
         highestTagIndex = 0
         lowestTagId = 100
         lowestTagIndex = 0
-        badBoiTagId = 18
+        badBoiTagId = 27
         landTag = 0
         cameraAngleBirdsEye = -70
         markerLength = 5
@@ -375,6 +381,7 @@ class image_converter:
                 self.targetTagId, self.targetTagPosition = self.target_tag(headHome)
                 if(self.targetTagId == landTag and (abs(self.targetTagPosition[0] - self.videoTargetPixelX) < 20) and (abs(self.targetTagPosition[1] - self.videoTargetPixelY) < 20)):
                     send_msg_to_badboi(self.s)
+                    self.alt.land = True
                     drone_land()
                  
 
@@ -389,7 +396,7 @@ class image_converter:
             ''' Send the positions of the tag we wish to fly to to the PID update function to get new velocities '''
             self.flightCmd.linear.y = self.m_pidX.update(self.targetTagPosition[0], self.videoTargetPixelX)
             self.flightCmd.linear.x = self.m_pidY.update(self.targetTagPosition[1], self.videoTargetPixelY)
-            print("x (forward) and y (side) commands",self.flightCmd.linear.x, self.flightCmd.linear.y)
+            
             
             ''' if the target tag is within these boundaries then we've arrived here and we cannot see the next tag so we should rotate '''
             if(abs(self.targetTagPosition[0] - self.videoTargetPixelX) < 25 and abs(self.targetTagPosition[1] - self.videoTargetPixelY) < 25):
@@ -432,15 +439,6 @@ def main(args):
 
     s = setup_client()
     heard_from_badboi(s)
-
-
-    drone_takeoff()
-    alt = altitude_class(1.6)
-    print("Aquiring altitude")
-    alt.go_to_altitude()
-    print("Altitude aquired")
-    sleep(2)
-
     ic = image_converter(s)
     rate = rospy.Rate(1)
     while not rospy.is_shutdown() and headHome == True:

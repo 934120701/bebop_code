@@ -68,11 +68,7 @@ class PID_class (object):
       i = self.m_ki * self.m_integral
 
       # sum the proportional, derivative and integral to obtain controller output value
-      output = p + d + i
-      print("P: ", p, "D: ", d, "I: ")
-      print("output: ", max(min(output, self.m_maxOutput), self.m_minOutput))
-      print("target value: ", targetValue, "value: ", value)
-      #rospy.loginfo("P is %f, D is %f, I is %f", p, d, i) 
+      output = p + d + i 
 
       # save current error and time for the next cycle
       self.m_previousError = error
