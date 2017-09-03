@@ -77,17 +77,14 @@ class altitude_class:
         if (self.altitude < self.desiredAltitude - 0.1):
             flightCmd.linear.z = 0.2
             flightPub.publish(flightCmd)
-            print("going up")
 
         elif (self.altitude > self.desiredAltitude + 0.1):
             flightCmd.linear.z = -0.2
             flightPub.publish(flightCmd)
-            print("going down")
 
         else:
             flightCmd.linear.z = 0
             flightPub.publish(flightCmd)
-            print("maintain altitude")
 
 # Callback for the above subscriber. Sends one command to the drone to fly up/down 0.1 max speed if the current altitude is not within 10 cm of the desired altitude
 
@@ -95,13 +92,10 @@ class altitude_class:
     def altitude_callback(self, data):
 
         self.altitude = data.altitude
-        print("Altitude: ", self.altitude)
-        print("land: ", self.land)
         if (self.land == False):
           self.go_to_altitude()
         else:
           drone_land()
-        print(" ")
         '''   flightPub = rospy.Publisher('/bebop/cmd_vel', Twist, queue_size=10)
         flightCmd = Twist()
         print("desired: ", self.desiredAltitude)

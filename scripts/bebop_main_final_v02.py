@@ -10,7 +10,7 @@ from bebop_functions import *
 using them to feed velocity commands back to the drone """
 class image_converter:
 
-    def __init__(self,s):
+    def __init__(self):#,s):
 
 
         ''' Create the variables used across the functions in the class image_converter'''
@@ -35,7 +35,7 @@ class image_converter:
         self.tagZeroVisitTimes = 0
         self.videoTargetPixelX = 428#428
         self.videoTargetPixelY = 400 #400 #320 previously
-        self.s = s
+        #self.s = s
         self.count = 0
         self.count2 = 0
         self.m_pidX = PID_class(0.001,
@@ -224,7 +224,9 @@ class image_converter:
         landTag = 0
         cameraAngleBirdsEye = -70
         markerLength = 5
+        self.movementEnabled = True
         self.count = self.count + 1
+        self.currentTime = rospy.get_time()
         
 
         ''' Load in the camera cooefficients from the calibration.yaml file in config folder '''
@@ -247,19 +249,23 @@ class image_converter:
             self.count2 = 0
         if (self.keepRotating == True):
             self.stop_and_rotate()
+        if (self.movementEnabled == False):
+            if (rospy.get_time() > self.badBoiTime + 3):
+                self.movementEnabled = True
+
 
         ''' This if statement lets us check if we have detected a tag by checking the size
          of the corners list to see if it's greater than 0. If it is, then we want to
         find the center position of the tag and then correct the camera angle to center
         it by publishing back a new angle to the control_camera topic. '''
-        if (len(self.corners) != 0 or self.count2 > 800):
-            self.count = 0
+        if (len(self.corners) != 0):# or self.count2 > 800):
+            #self.count = 0
+            self.lastTagTime = rospy.get_time()
 
             ''' Draw on the markers so we can see they've been detected'''
             gray = aruco.drawDetectedMarkers(cv_image, self.corners, self.ids)
             ''' Calls the function to add the highest and lowest tags to their lists '''
             self.update_tag_lists()
-            print(" ")
 
             # Check to see if we've seen a tag dropped by the BadBoi
             if (self.firstTagSeen == False):
@@ -279,20 +285,21 @@ class image_converter:
                             # If we're wihin 20x20 pixels, set the self.atStartTag variable to true so we know there's no need to navigate to it
                             else:
                                 self.atStartTag = True
+                                self.timeAtTag1 = rospy.get_time()
                         # If we're within 20x20 pixels, start to rotate
                         else:   
                             self.stop_and_rotate()
                             self.keepRotating = True
                             # Check to see if we've seen a BadBoi tag within the last 11 frames
                             if (self.check_frames_for_badboi_tag() == False):
-                                
                                 # If we haven't and we have rotate over a period of 200 frames, head back to tag 0
-                                if (self.count2 > 600):
+                                if (rospy.get_time() > self.timeAtTag1 + 5):
                                     self.goToTag = 0
                                     found = False
                                     self.keepRotating = False
                                     self.atStartTag = False
                                     self.count2 = 0
+                                    print("Back to 0")
                                 
                             # If we have seen a BadBoi tag, set self.firstTagSeen to true and we can begin tracking tags
                             else:
@@ -347,11 +354,12 @@ class image_converter:
                                 self.count2 = 0
                             else:
                                 self.atStartTag = True
+                                self.timeAtTag2 = rospy.get_time()
                                 self.stop_and_rotate()
                         
                         else:
                             if (self.check_frames_for_badboi_tag() == False):
-                                if (self.count2 > 600):
+                                if (rospy.get_time() > self.timeAtTag2 + 5):
                                     self.count2 = 0
                                     found = False
                                     self.keepRotating = False
@@ -373,25 +381,24 @@ class image_converter:
                 # ARRIVE AT BADBOI CHECK
                 if((self.targetTagId == badBoiTagId) and (abs(self.targetTagPosition[0] - self.videoTargetPixelX) < 20) and (abs(self.targetTagPosition[1] - self.videoTargetPixelY) < 20)):
                     headHome = True
+                    self.movementEnabled = False
+                    self.badBoiTime = rospy.get_time()
+                    print("badBoiTime = ", self.badBoiTime)
                     self.bebop_hover()
-                    sleep(3)
+                    #sleep(3)
 
             # LANDING
             elif (headHome == True and self.firstTagSeen == True):
                 self.targetTagId, self.targetTagPosition = self.target_tag(headHome)
                 if(self.targetTagId == landTag and (abs(self.targetTagPosition[0] - self.videoTargetPixelX) < 20) and (abs(self.targetTagPosition[1] - self.videoTargetPixelY) < 20)):
-                    send_msg_to_badboi(self.s)
+                    #send_msg_to_badboi(self.s)
                     self.alt.land = True
                     drone_land()
                  
 
         ''' if to check if we've seen a tag in the last 30 frames '''
-        if(self.count <= 30 and self.firstTagSeen == True):
+        if(self.lastTagTime <= self.currentTime + 1 and self.firstTagSeen == True and self.movementEnabled == True):
             cv2.circle(cv_image, (int(self.targetTagPosition[0]), int(self.targetTagPosition[1])), 10, (0, 0, 255), -1)
-            ''' Send the current value and the target value for the Y position of the tag to the PID function'''
-            '''if (headHome == True and self.targetTagId <= 2):
-                altitudeCheck = altitude_class(1.6)
-                altitudeCheck.go_to_altitude()'''
 
             ''' Send the positions of the tag we wish to fly to to the PID update function to get new velocities '''
             self.flightCmd.linear.y = self.m_pidX.update(self.targetTagPosition[0], self.videoTargetPixelX)
@@ -409,11 +416,11 @@ class image_converter:
             self.flight_pub.publish(self.flightCmd)
 
         # If we haven't seen a tag in a while, just hover a second (could be we temporarily lose it with light reflections)
-        elif (self.count > 30 and self.count <= 200 and self.firstTagSeen == True):
+        elif (self.lastTagTime > self.currentTime + 1 and self.lastTagTime <= self.currentTime + 2 and self.firstTagSeen == True):
             self.bebop_hover()
 
         # If we haven't seen a tag in a long while, rotate to see if we can see one
-        elif (self.count > 200): # and self.firstTagSeen == True):
+        elif (self.lastTagTime > self.currentTime + 2 and self.movementEnabled == True): # and self.firstTagSeen == True):
             self.stop_and_rotate()
 
 
@@ -421,7 +428,7 @@ class image_converter:
 
         '''Display the video feed frames every 3 ms.'''
         cv2.imshow("Image window", gray)
-        cv2.waitKey(5)  # 5
+        cv2.waitKey(3)  # 5
 
         ''' Publish the image back into ROS image message type (not sure why, I guess it's if you
         want to do something else with it after using OpenCV).'''
@@ -437,9 +444,9 @@ def main(args):
     ''' Initialise the node under the name image_converter'''
     rospy.init_node('image_converter', anonymous=True)
 
-    s = setup_client()
-    heard_from_badboi(s)
-    ic = image_converter(s)
+    #s = setup_client()
+    #heard_from_badboi(s)
+    ic = image_converter()#s)
     rate = rospy.Rate(1)
     while not rospy.is_shutdown() and headHome == True:
         badboiClassCall.bebop_send()        
