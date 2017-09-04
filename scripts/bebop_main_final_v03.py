@@ -38,10 +38,12 @@ class image_converter:
         self.s = s
         self.count = 0
         self.count2 = 0
+        self.recoverMode = False
         self.lastTagTime = rospy.get_time()
         self.timeAtTag0 = None
         self.timeAtTag1 = None
         self.timeAtTag2 = None
+        self.rotationDirection = 1
         self.m_pidX = PID_class(0.001,
                                 0.001,
                                 0.008,
@@ -77,7 +79,7 @@ class image_converter:
         self.publish_camera(-70)
 
         drone_takeoff()
-        self.alt = altitude_class(1.5)
+        self.alt = altitude_class(1.6)
         #sleep(5)
 
 
@@ -207,7 +209,10 @@ class image_converter:
     def stop_and_rotate(self):
         self.flightCmd.linear.y = 0
         self.flightCmd.linear.x = 0
-        self.flightCmd.angular.z = 0.2
+        if (self.rotationDirection == 1):
+            self.flightCmd.angular.z = 0.2
+        else:
+            self.flightCmd.angular.z = -0.2
         self.flight_pub.publish(self.flightCmd)
 
     ''' Draws the overlay on the image with the crosshairs '''
@@ -217,10 +222,6 @@ class image_converter:
         cv2.rectangle(cv_image, (self.videoTargetPixelX - 25, self.videoTargetPixelY - 25), (self.videoTargetPixelX + 25, self.videoTargetPixelY + 25), 255, 2)
 
     def flight_start_tag(tagId):
-        '''if (tagId == 1):
-            time = self.timeAtTag1
-        elif (tagId == 2):
-            time = self.timeAtTag2'''
 
         self.targetTagPosition, found = self.get_tag_position_from_id(tagId)
         if (self.keepRotating == True):
@@ -245,9 +246,6 @@ class image_converter:
         if (self.atStartTag == True):   
             self.stop_and_rotate()
             self.keepRotating = True
-            '''if ((abs(self.targetTagPosition[0] - self.videoTargetPixelX) > 20) or (abs(self.targetTagPosition[1] - self.videoTargetPixelY) > 20)):
-                self.update_and_publish_pid_flight()
-                cv2.circle(cv_image, (int(self.targetTagPosition[0]), int(self.targetTagPosition[1])), 10, (0, 0, 255), -1)'''
             # Check to see if we've seen a BadBoi tag within the last 11 frames
             if (self.check_frames_for_badboi_tag() == False):
                 # If we haven't and we have rotate over a period of 200 frames, head back to tag 0
@@ -340,10 +338,12 @@ class image_converter:
             gray = aruco.drawDetectedMarkers(cv_image, self.corners, self.ids)
             ''' Calls the function to add the highest and lowest tags to their lists '''
             self.update_tag_lists()
+            print("goToTag: ", self.goToTag)
 
             # Check to see if we've seen a tag dropped by the BadBoi
             if (self.firstTagSeen == False):
                 if (self.goToTag == 1):
+                    self.rotationDirection = 1
                     self.targetTagPosition, found = self.get_tag_position_from_id(1)
                     if (self.keepRotating == True):
                         self.stop_and_rotate()
@@ -364,6 +364,9 @@ class image_converter:
                                 print("At start tag 1")
                                 self.timeAtTag1 = rospy.get_time()
                                 print("timeAtTag1 reset")
+                                if (self.recoverMode == True):
+                                    self.goToTag = 0
+                                    self.recoverMode = False
                         # If we're within 20x20 pixels, start to rotate
                     if (self.atStartTag == True):   
                         self.stop_and_rotate()
@@ -434,10 +437,16 @@ class image_converter:
                     elif (found == False and self.timeAtTag0 + 2 < rospy.get_time()):
                         self.stop_and_rotate()
                         self.keepRotating = True
+                        if (self.tagZeroVisitTimes % 2 == 0):
+                            self.goToTag = 1
+                        else:
+                            self.goToTag = 2
+                        self.recoverMode = True
 
 
                 # Same method employed in the block for flying to tag 1
                 elif (self.goToTag == 2):
+                    self.rotationDirection = 2
                     self.targetTagPosition, found = self.get_tag_position_from_id(2)
                     if (self.keepRotating == True):
                         self.stop_and_rotate()
@@ -492,14 +501,15 @@ class image_converter:
             elif (headHome == True and self.firstTagSeen == True):
                 self.targetTagId, self.targetTagPosition = self.target_tag(headHome)
                 if(self.targetTagId == landTag and (abs(self.targetTagPosition[0] - self.videoTargetPixelX) < 20) and (abs(self.targetTagPosition[1] - self.videoTargetPixelY) < 20)):
-                    #send_msg_to_badboi(self.s)
+                    send_msg_to_badboi(self.s)
                     self.alt.land = True
                     drone_land()
                  
 
         ''' if to check if we've seen a tag in the last 30 frames '''
         if(self.lastTagTime <= self.currentTime + 1 and self.firstTagSeen == True and self.movementEnabled == True):
-            if (self.targetTagId <= 3):
+            print("First tag seen")
+            if (self.targetTagId <= 4):
                 self.alt.desiredAltitude = 1.4
             self.alt.desiredAltitude = 1.7
             cv2.circle(cv_image, (int(self.targetTagPosition[0]), int(self.targetTagPosition[1])), 10, (0, 0, 255), -1)
@@ -511,7 +521,7 @@ class image_converter:
             
             ''' if the target tag is within these boundaries then we've arrived here and we cannot see the next tag so we should rotate '''
             if(abs(self.targetTagPosition[0] - self.videoTargetPixelX) < 25 and abs(self.targetTagPosition[1] - self.videoTargetPixelY) < 25):
-                self.flightCmd.angular.z = 0.2
+                self.flightCmd.angular.z = 0.3
             # If not, stop rotating and stop gaining any height
             else:
                 self.flightCmd.angular.z = 0

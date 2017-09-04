@@ -61,6 +61,7 @@ class altitude_class:
         self.altitudeSub = rospy.Subscriber("/bebop/states/ardrone3/PilotingState/AltitudeChanged",
                               Ardrone3PilotingStateAltitudeChanged, self.altitude_callback)
         self.land = False
+        self.altitudeAchieved = False
 
 
     def go_to_altitude(self):
@@ -68,6 +69,7 @@ class altitude_class:
         flightCmd = Twist()
         rate = rospy.Rate(5)
         self.stopSubscribe = False
+        #print(self.altitude)
 
         #while self.stopSubscribe != True:
 
@@ -75,16 +77,20 @@ class altitude_class:
       
 
         if (self.altitude < self.desiredAltitude - 0.1):
-            flightCmd.linear.z = 0.2
+            flightCmd.linear.z = 0.15
+            #print("up ", self.altitude)
             flightPub.publish(flightCmd)
 
         elif (self.altitude > self.desiredAltitude + 0.1):
             flightCmd.linear.z = -0.2
+            #print("down ", self.altitude)
             flightPub.publish(flightCmd)
 
         else:
             flightCmd.linear.z = 0
+            #print("same ", self.altitude)
             flightPub.publish(flightCmd)
+            self.altitudeAchieved = True
 
 # Callback for the above subscriber. Sends one command to the drone to fly up/down 0.1 max speed if the current altitude is not within 10 cm of the desired altitude
 
@@ -96,27 +102,6 @@ class altitude_class:
           self.go_to_altitude()
         else:
           drone_land()
-        '''   flightPub = rospy.Publisher('/bebop/cmd_vel', Twist, queue_size=10)
-        flightCmd = Twist()
-        print("desired: ", self.desiredAltitude)
-        print("current: ", self.altitude)
-
-        if (self.altitude < self.desiredAltitude - 0.1):
-            flightCmd.linear.z = 0.2
-            flightPub.publish(flightCmd)
-
-        elif (self.altitude > self.desiredAltitude + 0.1):
-            flightCmd.linear.z = -0.2
-            flightPub.publish(flightCmd)
-
-        else:
-            flightCmd.linear.z = 0
-            flightPub.publish(flightCmd)
-            sleep(3)
-            self.stopSubscribe = True
-            self.altitudeSub.unregister()
-            print("stopSubscribe made true in else")'''
-
 
 
 class badboi_message_class:
@@ -135,8 +120,8 @@ class badboi_message_class:
         self.bebopPub.publish(self.bebopMsg)
 
 def setup_client():
-    host = '192.168.1.180'
-    port = 10030
+    host = '192.168.1.181'
+    port = 10072
     client = socket.socket(socket.AF_INET,socket.SOCK_STREAM)
     client.connect((host, port))
     return client

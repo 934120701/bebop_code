@@ -2,7 +2,7 @@
 <launch>
     <arg name="namespace" default="opencv_package" />
 
-    <node name="bebop_main_node" pkg="opencv_package" type="bebop_main_final_v02.py" output="screen">
+    <node name="bebop_main_node" pkg="opencv_package" type="bebop_main_final_v03.py" output="screen">
     	<rosparam command="load" file="$(find opencv_package)/config/config.yaml" />
 	<rosparam command="load" file="$(find opencv_package)/config/calibration.yaml" />
     </node>   
